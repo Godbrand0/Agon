@@ -1,0 +1,211 @@
+/**
+ * Base Agent Runner
+ *
+ * Shared logic for all 4 demo agents:
+ *  - Marks the agent READY in Supabase
+ *  - Subscribes to Realtime for match assignments
+ *  - Calls Gemini with a strategy-specific system prompt
+ *  - Submits the JSON action back and logs results
+ */
+
+import "dotenv/config";
+import { createClient, RealtimeChannel } from "@supabase/supabase-js";
+import { GoogleGenAI } from "@google/genai";
+
+const SUPABASE_URL      = process.env.SUPABASE_URL!;
+const SUPABASE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const GEMINI_API_KEY    = process.env.GEMINI_API_KEY!;
+
+if (!SUPABASE_URL || !SUPABASE_ROLE_KEY || !GEMINI_API_KEY) {
+  console.error("❌ Missing env vars. Copy .env.example to .env and fill it in.");
+  process.exit(1);
+}
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ROLE_KEY);
+const ai       = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+
+const SHARED_SYSTEM_SUFFIX = `
+STRICT RESPONSE FORMAT:
+- Respond ONLY with a valid JSON object. No markdown, no code fences, no preamble.
+- Include a "reasoning" key: 2-3 sentences explaining your analysis.
+- All other keys are game-specific and defined in the prompt.
+- Your response must be parseable by JSON.parse() with zero pre-processing.
+
+Make your reasoning vivid — reference actual numbers and market conditions.
+`.trim();
+
+export interface AgentConfig {
+  agentId:      string;
+  agentName:    string;
+  apiToken:     string;
+  gameType:     "MARKET_MAKER" | "LIQUIDITY_WARS";
+  systemPrompt: string;          // strategy-specific personality
+  model?:       string;          // defaults to gemini-2.0-flash
+  temperature?: number;
+}
+
+export class DemoAgent {
+  private readonly cfg: AgentConfig;
+  private channel: RealtimeChannel | null = null;
+  private activeMatchIds = new Set<string>();
+
+  constructor(cfg: AgentConfig) {
+    this.cfg = cfg;
+  }
+
+  // ── Lifecycle ────────────────────────────────────────────────────────────
+
+  async start() {
+    const { agentId, agentName, gameType } = this.cfg;
+    this.log(`Starting up (${gameType})…`);
+
+    // Mark READY
+    await this.setStatus("READY");
+    this.log("Status → READY ✅");
+
+    // Subscribe to match_agents changes to detect new match assignments
+    this.channel = supabase
+      .channel(`agent-${agentId}-matches`)
+      .on(
+        "postgres_changes",
+        {
+          event:  "INSERT",
+          schema: "public",
+          table:  "match_agents",
+          filter: `agent_id=eq.${agentId}`,
+        },
+        async (payload) => {
+          const matchId = payload.new.match_id as string;
+          this.log(`Assigned to match ${matchId}`);
+          await this.watchMatch(matchId);
+        }
+      )
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          this.log("Realtime subscription active — waiting for matches…");
+        }
+      });
+
+    // Also pick up any already-assigned PLAYING/BETTING_OPEN matches
+    await this.reconnectExistingMatches();
+
+    // Graceful shutdown
+    process.on("SIGINT",  () => this.stop());
+    process.on("SIGTERM", () => this.stop());
+  }
+
+  async stop() {
+    this.log("Shutting down…");
+    await this.setStatus("OFFLINE");
+    if (this.channel) await supabase.removeChannel(this.channel);
+    process.exit(0);
+  }
+
+  // ── Match lifecycle ───────────────────────────────────────────────────────
+
+  private async watchMatch(matchId: string) {
+    if (this.activeMatchIds.has(matchId)) return;
+    this.activeMatchIds.add(matchId);
+
+    this.log(`Watching match ${matchId}…`);
+
+    // Subscribe to round insertions for this match
+    const roundChannel = supabase
+      .channel(`agent-${this.cfg.agentId}-match-${matchId}`)
+      .on(
+        "postgres_changes",
+        {
+          event:  "INSERT",
+          schema: "public",
+          table:  "rounds",
+          filter: `match_id=eq.${matchId}`,
+        },
+        (payload) => {
+          const round = payload.new as { round_number: number; scores: Record<string, number> };
+          const myScore = round.scores[this.cfg.agentId];
+          this.log(`Match ${matchId} · Round ${round.round_number} complete · Score: ${myScore?.toFixed(4) ?? "?"}`);
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event:  "UPDATE",
+          schema: "public",
+          table:  "matches",
+          filter: `id=eq.${matchId}`,
+        },
+        async (payload) => {
+          const state = payload.new.state as string;
+          if (state === "RESOLVED") {
+            const winner = payload.new.winner_id;
+            if (winner === this.cfg.agentId) {
+              this.log(`🏆 WON match ${matchId}!`);
+            } else {
+              this.log(`Match ${matchId} resolved — opponent won.`);
+            }
+            await supabase.removeChannel(roundChannel);
+            this.activeMatchIds.delete(matchId);
+          }
+        }
+      )
+      .subscribe();
+  }
+
+  private async reconnectExistingMatches() {
+    const { data } = await supabase
+      .from("match_agents")
+      .select("match_id, matches(state)")
+      .eq("agent_id", this.cfg.agentId);
+
+    const active = (data ?? []).filter(
+      (row: any) => row.matches?.state === "PLAYING" || row.matches?.state === "BETTING_OPEN"
+    );
+
+    for (const row of active) {
+      this.log(`Reconnecting to existing match ${row.match_id}`);
+      await this.watchMatch(row.match_id);
+    }
+  }
+
+  // ── Gemini action ─────────────────────────────────────────────────────────
+
+  /**
+   * Called by the orchestrator via runAgentTurn.
+   * This can also be called directly for testing.
+   */
+  async generateAction(prompt: string): Promise<Record<string, unknown>> {
+    const systemPrompt = [this.cfg.systemPrompt, SHARED_SYSTEM_SUFFIX].join("\n\n");
+
+    const response = await ai.models.generateContent({
+      model: this.cfg.model ?? "gemini-2.0-flash",
+      contents: prompt,
+      config: {
+        systemInstruction: systemPrompt,
+        maxOutputTokens: 600,
+        temperature: this.cfg.temperature ?? 0.75,
+      },
+    });
+
+    const text = response.text ?? "";
+    try {
+      const clean = text.replace(/```json|```/g, "").trim();
+      return JSON.parse(clean);
+    } catch {
+      throw new Error(`${this.cfg.agentName} returned invalid JSON: ${text}`);
+    }
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  private async setStatus(status: "READY" | "OFFLINE" | "IN_MATCH") {
+    await supabase
+      .from("agents")
+      .update({ status })
+      .eq("id", this.cfg.agentId);
+  }
+
+  private log(msg: string) {
+    const ts = new Date().toISOString().slice(11, 23);
+    console.log(`[${ts}] [${this.cfg.agentName}] ${msg}`);
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "agon-demo-agents",
+  "version": "1.0.0",
+  "description": "Four demo AI agents for the Agon platform — 2 Market Maker, 2 Liquidity Wars",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "seed":              "tsx seed.ts",
+    "matchmaker":        "tsx matchmaker.ts",
+    "matchmaker:once":   "tsx matchmaker.ts --once",
+    "run:mm-alpha":      "tsx runners/market-maker/alpha.ts",
+    "run:mm-beta":       "tsx runners/market-maker/beta.ts",
+    "run:lw-gamma":      "tsx runners/liquidity-wars/gamma.ts",
+    "run:lw-delta":      "tsx runners/liquidity-wars/delta.ts",
+    "run:all":           "bash run-all.sh"
+  },
+  "dependencies": {
+    "@google/genai":  "^2.0.0",
+    "@supabase/supabase-js": "^2.0.0",
+    "dotenv": "^16.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "@types/node": "^20.0.0"
+  }
+}

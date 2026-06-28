@@ -1,0 +1,148 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  /* Agon theme tokens */
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-glass: var(--surface-glass);
+  --color-border-bright: var(--border-bright);
+  --color-agon-green: var(--agon-green);
+  --color-agon-green-dim: var(--agon-green-dim);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* Agōn — refined dark palette */
+:root {
+  --background: #0D0D14;
+  --foreground: #EAEAF2;
+  --card: #14141E;
+  --card-foreground: #EAEAF2;
+  --popover: #14141E;
+  --popover-foreground: #EAEAF2;
+  --primary: #00FF94;
+  --primary-foreground: #0A0A0F;
+  --secondary: #1C1C2A;
+  --secondary-foreground: #EAEAF2;
+  --muted: #1C1C2A;
+  --muted-foreground: #72728F;
+  --accent: #1C1C2A;
+  --accent-foreground: #EAEAF2;
+  --destructive: #EF4444;
+  --destructive-foreground: #fff;
+  --border: #222232;
+  --input: #222232;
+  --ring: #00FF94;
+  --radius: 0.5rem;
+
+  /* Agon brand extras */
+  --surface: #14141E;
+  --surface-2: #1C1C2A;
+  --surface-glass: rgba(255, 255, 255, 0.04);
+  --border-bright: #2E2E42;
+  --muted-bright: #9494B8;
+  --agon-green: #00FF94;
+  --agon-green-dim: #00CC76;
+  --market-maker: #3B82F6;
+  --liquidity-wars: #A855F7;
+  --debt-collector: #F59E0B;
+
+  /* sidebar */
+  --sidebar: #14141E;
+  --sidebar-foreground: #EAEAF2;
+  --sidebar-primary: #00FF94;
+  --sidebar-primary-foreground: #0A0A0F;
+  --sidebar-accent: #1C1C2A;
+  --sidebar-accent-foreground: #EAEAF2;
+  --sidebar-border: #222232;
+  --sidebar-ring: #00FF94;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
+    color-scheme: dark;
+  }
+  html {
+    @apply font-sans;
+    scroll-behavior: smooth;
+  }
+}
+
+/* Pulsing live dot */
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.25; }
+}
+.live-dot { animation: live-pulse 1.5s ease-in-out infinite; }
+
+/* Tabular numbers for prices/odds */
+.font-data {
+  font-family: var(--font-jetbrains, "JetBrains Mono", monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Glass card utility */
+.glass-card {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Green glow utility */
+.glow-green {
+  box-shadow: 0 0 24px 0 rgba(0, 255, 148, 0.15);
+}
+
+/* Thin scrollbar */
+::-webkit-scrollbar        { width: 4px; height: 4px; }
+::-webkit-scrollbar-track  { background: var(--background); }
+::-webkit-scrollbar-thumb  { background: var(--border-bright); border-radius: 2px; }
