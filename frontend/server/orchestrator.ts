@@ -2,6 +2,7 @@ import { getGameEngine } from "../games";
 import type { GameType, MatchResult } from "../games/types";
 import { runAgentTurn, AGENT_SYSTEM_PROMPT } from "../agents/runtime";
 import { supabaseAdmin } from "../lib/supabase";
+import { chargeNanopayment } from "../lib/circle";
 import { sleep } from "../lib/utils";
 import {
   getOrchestratorWallet,
@@ -33,6 +34,15 @@ export class MatchOrchestrator {
     engine.initialize(agentIds);
 
     const wallet = getOrchestratorWallet();
+    
+    // Charge match entry fees
+    for (const matchAgent of match.match_agents) {
+      const agentId = matchAgent.agent_id;
+      const walletAddress = matchAgent.agents?.wallet_address;
+      if (walletAddress) {
+        await chargeNanopayment(agentId, walletAddress, 0.50, `Match Entry Fee for match ${matchId}`);
+      }
+    }
 
     // Close betting on-chain
     try {
@@ -80,6 +90,13 @@ export class MatchOrchestrator {
       for (const result of actionResults) {
         if (result.status === "fulfilled") {
           const { agentId, action } = result.value;
+          
+          // Charge action execution fee
+          const walletAddress = match.match_agents.find((ma: any) => ma.agent_id === agentId)?.agents?.wallet_address;
+          if (walletAddress) {
+            await chargeNanopayment(agentId, walletAddress, 0.0005, `Action Execution Fee for round ${round}`);
+          }
+          
           engine.processAgentAction(agentId, { agentId, round, action, timestamp: Date.now() });
         }
       }

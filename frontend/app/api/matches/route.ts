@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
   // Validate agents exist and are same game type
   const { data: agents, error: agentErr } = await db
     .from("agents")
-    .select("id, wallet_address, registry_id, game_type")
+    .select("id, wallet_address, owner_address, registry_id, game_type")
     .in("id", agentIds);
 
   if (agentErr || !agents || agents.length !== 2) {
@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
       args: [
         contractMatchId,
         agents.map((a) => BigInt(a.registry_id ?? 0)),
-        agents.map((a) => a.wallet_address as `0x${string}`),
+        agents.map((a) => a.owner_address as `0x${string}`),
         BigInt(Math.floor(delayUntilStartMs / 1000)),
       ],
     });

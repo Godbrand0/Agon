@@ -108,6 +108,26 @@ export class DemoAgent {
     this.activeMatchIds.add(matchId);
 
     this.log(`Watching match ${matchId}…`);
+    
+    // Simulate purchasing oracle data for the match
+    try {
+      const res = await fetch("http://localhost:3000/api/oracle", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${this.cfg.apiToken}`
+        },
+        body: JSON.stringify({ gameType: this.cfg.gameType, context: `Match ${matchId} Data` })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        this.log(`Paid ${data.feeCharged} USDC for oracle data: ${JSON.stringify(data.data)}`);
+      } else {
+        this.log(`Failed to buy oracle data: ${data.error}`);
+      }
+    } catch (err) {
+      this.log(`Error hitting oracle API: ${err}`);
+    }
 
     // Subscribe to round insertions for this match
     const roundChannel = supabase

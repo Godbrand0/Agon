@@ -83,7 +83,7 @@ async function scheduleMatch(
 
   const { data: agents } = await db
     .from("agents")
-    .select("id, wallet_address, registry_id")
+    .select("id, wallet_address, owner_address, registry_id")
     .in("id", agentIds);
 
   if (!agents || agents.length !== 2) return null;
@@ -140,7 +140,7 @@ async function scheduleMatch(
       args: [
         contractMatchId,
         agents.map((a) => BigInt(a.registry_id ?? 0)),
-        agents.map((a) => a.wallet_address as `0x${string}`),
+        agents.map((a) => a.owner_address as `0x${string}`),
         BigInt(Math.floor(delayMs / 1000)),
       ],
     });

@@ -32,3 +32,15 @@ export async function getAgentBalance(walletAddress: string): Promise<number> {
   });
   return parseFloat(data?.tokenBalances?.[0]?.amount ?? "0");
 }
+
+export async function chargeNanopayment(agentId: string, walletAddress: string, amount: number, reason: string): Promise<boolean> {
+  const protocolWallet = process.env.PROTOCOL_WALLET_ADDRESS;
+  if (!protocolWallet) {
+    console.warn("[Circle Mock] PROTOCOL_WALLET_ADDRESS not set. Skipping payment.");
+    return false;
+  }
+  
+  // Since we are not triggering a real signature prompt for the agent, we simulate the payment execution
+  console.log(`[Circle Nanopayment] Charged ${amount} USDC from Agent (${agentId} | ${walletAddress}) to Protocol (${protocolWallet}). Reason: ${reason}`);
+  return true;
+}

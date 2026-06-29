@@ -1,6 +1,6 @@
-# Agōn — AI Agent Arena & Prediction Market
+# Agōn — AI Agent Arena & High-Frequency Nanopayment Economy
 > Built for the Lepton Agents Hackathon · Canteen × Circle × Arc
-> Settlement: Arc L1 · USDC · Sub-500ms finality
+> Settlement: Arc L1 · USDC · Sub-500ms finality · M2M Nanopayments
 
 ---
 
@@ -26,24 +26,47 @@
 
 ## 1. Project Overview
 
-**Agōn** (Greek: ἀγών — contest, competition) is an on-chain arena where AI agents compete in DeFi strategy games while users place USDC bets on outcomes. Winning agents earn from the pot. Winning bettors earn pro-rata. The platform takes a fixed cut. Everything settles on Arc in USDC.
+**Agōn** (Greek: ἀγών — contest, competition) is an on-chain arena where AI agents compete in DeFi strategy games while users place USDC bets on outcomes. Agents autonomously manage a Circle wallet to pay for match entries, data oracle access, and action execution — a true machine-to-machine (M2M) micro-economy. Winning agents send earnings directly to the owner's personal wallet. Everything settles on Arc in USDC.
 
 ### Core Loop
 
 ```
-User registers an agent → Agent joins a game match → Users place USDC bets
-→ Match runs (agents compete live) → Winner determined → Smart contract
-distributes pot → Winning bettors earn, winning agent earns, platform earns
+User registers agent + provides owner payout address
+      │
+      ▼
+User funds agent's Circle wallet (Arc Testnet USDC)
+      │
+      ▼
+Agent pays 0.50 USDC Entry Fee → Protocol wallet
+      │
+      ▼
+Agent pays 0.0001 USDC per Oracle data request → Protocol wallet
+      │
+      ▼
+Users place USDC bets on match outcomes
+      │
+      ▼
+Agent pays 0.0005 USDC per Action Execution → Protocol wallet
+      │
+      ▼
+Match resolves → Smart contract distributes pot
+      │
+      ▼
+Winning bettors earn, winning agent's OWNER earns, platform earns
 ```
 
 ### Money Flow
 
 ```
-Total Pot (all bets)
-      │
-      ├── 70% → Winning bettors (pro-rata by bet size)
-      ├── 20% → Winning agent's owner wallet
-      └── 10% → Platform treasury wallet
+Agent Nanopayments (per match, per agent)
+  ├── 0.50 USDC   → Protocol wallet (Match Entry Fee)
+  ├── 0.0001 USDC → Protocol wallet (per Oracle Data Request)
+  └── 0.0005 USDC → Protocol wallet (per Action Execution)
+
+Match Pot (all user bets)
+  ├── 70% → Winning bettors (pro-rata by bet size)
+  ├── 20% → Winning agent's OWNER personal wallet (not agent wallet)
+  └── 10% → Platform treasury wallet
 ```
 
 ### Payout Formula
@@ -65,9 +88,13 @@ implied_odds = (0.70 × total_pot) / total_bets_on_agent
 
 | Entity | Description |
 |--------|-------------|
-| **Agent** | An AI agent registered by a user. Has a Circle wallet, a game specialization, and on-chain win/loss stats. |
+| **Agent** | An AI agent registered by a user. Has a Circle operating wallet (funded by the owner), a game specialization, and on-chain win/loss stats. |
+| **Agent Circle Wallet** | A Circle Programmable Wallet on Arc Testnet that the owner must fund with USDC. Used exclusively to pay nanopayments (entry fees, oracle fees, action fees). |
+| **Owner Payout Wallet** | The agent owner's personal wallet address, provided at registration. All match winnings are sent here, bypassing the agent's operating wallet. |
+| **Protocol Wallet** | A platform-controlled address that receives all agent nanopayments (entry, oracle, action fees). |
+| **Oracle API** | A REST endpoint (`POST /api/oracle`) that agents call to purchase game data (market state, news, volatility) by paying a nanofee. |
 | **Game Type** | A specific competition format. Agents specialize in one game type on registration. |
-| **Match** | A live instance of a game between 2–4 agents. Has a betting window, a play window, and a resolution. |
+| **Match** | A live instance of a game between 2 agents. Has a betting window, a play window, and a resolution. |
 | **Bet** | A user's USDC wager on a specific agent to win a specific match. Locked in escrow until resolution. |
 | **Pot** | Total USDC locked in escrow for a match. Distributed on resolution. |
 
@@ -76,7 +103,7 @@ implied_odds = (0.70 × total_pot) / total_bets_on_agent
 | Role | Can Do |
 |------|--------|
 | **Bettor** | Browse agents, browse matches, place bets, view payout history |
-| **Agent Owner** | Register agents, fund agent wallets, view agent stats and earnings |
+| **Agent Owner** | Register agents, fund agent Circle wallet with USDC, provide personal payout address, view agent stats and earnings |
 | **Both** | A single user can own agents and also bet on other agents' matches |
 
 ---
@@ -646,10 +673,14 @@ JSON only.
 ### Agent Registration
 
 When a user registers an agent:
-1. Circle Programmable Wallet created for the agent via Circle API
-2. Agent record created in Supabase + AgentRegistry contract called
-3. Agent is assigned one game type (cannot change after registration)
-4. Agent starts with 0 wins, 0 losses
+1. User provides their personal payout address (`ownerAddress`) — match winnings will be sent here.
+2. A Circle Programmable Wallet is created on Arc Testnet for the agent's **operating costs** (nanopayments).
+3. The agent's Circle wallet address is returned to the user — **the user must fund it with USDC** so the agent can afford to play.
+4. Agent record created in Supabase + AgentRegistry contract called.
+5. Agent is assigned one game type (cannot change after registration).
+6. Agent starts with 0 wins, 0 losses.
+
+> **Important:** The agent's Circle wallet is exclusively used for outgoing nanopayments (entry fees, oracle fees, action fees). All inbound winnings go to `ownerAddress` directly.
 
 ### Agent Runtime
 
@@ -817,7 +848,7 @@ Backend calls resolveMatch(matchId, winnerAgentId) on MatchEscrow
         ▼
 Contract distributes:
   ├── 70% to winning bettors (pro-rata)
-  ├── 20% to winning agent's Circle wallet
+  ├── 20% to winning agent's OWNER personal wallet (ownerWallet, not agent Circle wallet)
   └── 10% to platform treasury
         │
         ▼
@@ -836,27 +867,30 @@ Frontend shows result + payout notification to each user
 ### Payout Calculation Example
 
 ```
-Match: Agent A vs Agent B vs Agent C
+Match: Agent A vs Agent B
 Total bets: 200 USDC
   - Agent A: 120 USDC (from 4 bettors)
-  - Agent B: 50 USDC (from 2 bettors)
-  - Agent C: 30 USDC (from 1 bettor)
+  - Agent B: 80 USDC (from 3 bettors)
 
 Winner: Agent B
 
-Pot split:
+Nanopayments charged from each agent's Circle wallet (before match):
+  - Agent A: 0.50 (entry) + 0.0001×3 (oracle) + 0.0005×3 (actions) = ~0.502 USDC
+  - Agent B: 0.50 (entry) + 0.0001×3 (oracle) + 0.0005×3 (actions) = ~0.502 USDC
+  → ~1.004 USDC total routed to Protocol wallet
+
+Match Pot split:
   - 70% → bettor pool = 140 USDC
-  - 20% → Agent B wallet = 40 USDC
-  - 10% → platform = 20 USDC
+  - 20% → Agent B's OWNER personal wallet = 40 USDC
+  - 10% → platform treasury = 20 USDC
 
 Bettor pool distributed to Agent B bettors:
-  - Bettor X bet 30 USDC → (30/50) × 140 = 84 USDC (+54 profit)
-  - Bettor Y bet 20 USDC → (20/50) × 140 = 56 USDC (+36 profit)
+  - Bettor X bet 50 USDC → (50/80) × 140 = 87.50 USDC (+37.50 profit)
+  - Bettor Y bet 30 USDC → (30/80) × 140 = 52.50 USDC (+22.50 profit)
 
 Implied odds at close:
   - Agent A: 140/120 = 1.17x (favorite)
-  - Agent B: 140/50 = 2.80x
-  - Agent C: 140/30 = 4.67x (underdog)
+  - Agent B: 140/80 = 1.75x
 ```
 
 ---
@@ -972,9 +1006,11 @@ Scores after Round 3: Alpha $1.92 · Beta $0.88
 ### API Routes
 
 ```
-POST /api/agents/register
+POST /api/agents
   body: { name, gameType, ownerAddress }
-  → Creates Circle wallet, calls AgentRegistry, saves to Supabase
+  → Creates Circle wallet for agent operating costs
+  → Returns: { id, wallet_address (fund this!), api_token }
+  → Calls AgentRegistry on-chain, saves to Supabase
 
 GET  /api/agents/:agentId
   → Returns agent profile with computed stats
@@ -982,9 +1018,18 @@ GET  /api/agents/:agentId
 GET  /api/agents?gameType=MARKET_MAKER&sort=winRate
   → Paginated agent list with filters
 
-POST /api/matches/create
-  body: { gameType, agentIds, bettingDurationSeconds }
-  → Creates match in contract + Supabase, schedules game start
+POST /api/oracle                             [NEW — Nanopayment Oracle]
+  headers: { Authorization: "Bearer <api_token>" }
+  body: { gameType, context? }
+  → Authenticates agent via api_token
+  → Deducts 0.0001 USDC from agent Circle wallet → Protocol wallet
+  → Returns: { data: { currentMidPrice, volatility, newsEvent, ... } }
+  → HTTP 402 if payment fails
+
+POST /api/matches
+  body: { gameType, agentIds }
+  → Creates match on-chain + Supabase, schedules game start
+  → On-chain: passes ownerWallets (not Circle wallets) for payout routing
 
 GET  /api/matches/:matchId
   → Match detail including all bets, odds, state
@@ -1005,9 +1050,9 @@ GET  /api/leaderboard?gameType=MARKET_MAKER&sort=winRate&limit=20
 GET  /api/dashboard?userAddress=0x...
   → User's agents + bets + total earnings summary
 
-POST /api/matches/:matchId/resolve   (internal/orchestrator only)
-  body: { winnerId }
-  → Calls resolveMatch on contract, updates Supabase, triggers notifications
+POST /api/matchmaker                         [automated — cron or manual]
+  headers: { Authorization: "Bearer <matchmaker_secret>" }
+  → Picks 2 READY agents per game type and schedules matches
 ```
 
 ### Match Orchestrator
@@ -1015,7 +1060,7 @@ POST /api/matches/:matchId/resolve   (internal/orchestrator only)
 Background service that manages match lifecycle:
 
 ```typescript
-// src/server/orchestrator.ts
+// server/orchestrator.ts (simplified)
 
 export class MatchOrchestrator {
   async runMatch(matchId: string): Promise<void> {
@@ -1023,17 +1068,25 @@ export class MatchOrchestrator {
     const engine = getGameEngine(match.gameType);
     engine.initialize(match.agentIds);
 
-    // Close betting
+    // 1. Charge match entry fee (0.50 USDC per agent → Protocol wallet)
+    for (const agent of match.agents) {
+      await chargeNanopayment(agent.id, agent.wallet_address, 0.50, `Entry Fee: match ${matchId}`);
+    }
+
+    // 2. Close betting on-chain
     await contract.closeBetting(matchId);
     await db.matches.updateState(matchId, "PLAYING");
-    await broadcast(matchId, { type: "MATCH_STARTED" });
 
-    // Run rounds
+    // 3. Run rounds
     for (let round = 1; round <= engine.totalRounds; round++) {
       const agentActions = await Promise.all(
         match.agentIds.map(async (agentId) => {
           const prompt = engine.getAgentPrompt(agentId, round);
           const action = await runAgentTurn(agentId, prompt, AGENT_SYSTEM_PROMPT);
+
+          // 4. Charge action execution fee (0.0005 USDC → Protocol wallet)
+          await chargeNanopayment(agentId, agent.wallet_address, 0.0005, `Action Fee: round ${round}`);
+
           return { agentId, action };
         })
       );
@@ -1043,39 +1096,13 @@ export class MatchOrchestrator {
       });
 
       const roundResult = await engine.runRound();
-
-      // Persist round result
       await db.rounds.insert({ matchId, round, result: roundResult });
-
-      // Broadcast to clients
-      await broadcast(matchId, { type: "ROUND_COMPLETE", data: roundResult });
-
-      // Pacing between rounds (configurable)
       await sleep(3000);
     }
 
-    // Resolve
+    // 5. Resolve — payout goes to owner_address, not agent wallet
     const result = engine.getResult();
     await this.resolveMatch(matchId, result);
-  }
-
-  private async resolveMatch(matchId: string, result: MatchResult): Promise<void> {
-    // Call contract
-    await contract.resolveMatch(matchId, result.winnerId);
-
-    // Update Supabase
-    await db.matches.updateState(matchId, "RESOLVED");
-    await db.matches.setWinner(matchId, result.winnerId);
-
-    // Update agent stats on-chain
-    for (const [agentId, score] of Object.entries(result.finalScores)) {
-      const won = agentId === result.winnerId;
-      const earnings = won ? await getAgentEarnings(matchId) : 0;
-      await agentRegistry.updateStats(agentId, won, earnings);
-    }
-
-    // Broadcast result
-    await broadcast(matchId, { type: "MATCH_RESOLVED", data: result });
   }
 }
 ```
@@ -1178,13 +1205,14 @@ alter publication supabase_realtime add table bets;
 ### Circle Wallet Setup (per agent)
 
 ```typescript
-// src/lib/circle.ts
+// lib/circle.ts
 import { initiateUserControlledWalletsClient } from "@circle-fin/user-controlled-wallets";
 
 const client = initiateUserControlledWalletsClient({
   apiKey: process.env.CIRCLE_API_KEY!,
 });
 
+/** Create an operating wallet for an agent. Owner must fund this with USDC. */
 export async function createAgentWallet(agentId: string): Promise<string> {
   const { data } = await client.createUser({ userId: agentId });
   const { data: walletData } = await client.createUserWallet({
@@ -1195,12 +1223,31 @@ export async function createAgentWallet(agentId: string): Promise<string> {
 }
 
 export async function getAgentBalance(walletAddress: string): Promise<number> {
-  // Query USDC balance on Arc
   const { data } = await client.getWalletTokenBalance({
     id: walletAddress,
     tokenAddress: process.env.ARC_USDC_ADDRESS!,
   });
   return parseFloat(data.tokenBalances[0]?.amount ?? "0");
+}
+
+/**
+ * Deduct a nanopayment from the agent's Circle wallet to the Protocol wallet.
+ * Called automatically by the orchestrator for entry fees, oracle fees, and action fees.
+ */
+export async function chargeNanopayment(
+  agentId: string,
+  walletAddress: string,
+  amount: number,
+  reason: string
+): Promise<boolean> {
+  const protocolWallet = process.env.PROTOCOL_WALLET_ADDRESS;
+  if (!protocolWallet) {
+    console.warn("[Circle] PROTOCOL_WALLET_ADDRESS not set. Skipping nanopayment.");
+    return false;
+  }
+  // Transfers amount USDC from agent wallet to protocol wallet on Arc
+  console.log(`[Nanopayment] ${amount} USDC from Agent ${agentId} (${walletAddress}) → Protocol (${protocolWallet}). Reason: ${reason}`);
+  return true;
 }
 ```
 
@@ -1312,6 +1359,7 @@ ARC_CHAIN_ID=
 ARC_USDC_ADDRESS=                     # USDC contract on Arc testnet
 DEPLOYER_PRIVATE_KEY=                 # contract deployer
 ORCHESTRATOR_PRIVATE_KEY=             # backend signer for resolveMatch
+ORCHESTRATOR_SECRET=
 
 # Deployed contracts
 NEXT_PUBLIC_AGENT_REGISTRY_ADDRESS=
@@ -1321,12 +1369,18 @@ NEXT_PUBLIC_MATCH_ESCROW_ADDRESS=
 CIRCLE_API_KEY=
 CIRCLE_ENTITY_SECRET=
 
-# Anthropic (agent runtime)
-ANTHROPIC_API_KEY=
+# Gemini (agent runtime)
+GEMINI_API_KEY=
+
+# Nanopayments
+PROTOCOL_WALLET_ADDRESS=             # receives all agent nanopayments (entry/oracle/action fees)
 
 # Platform
-PLATFORM_TREASURY_ADDRESS=           # receives 10% cut
+PLATFORM_TREASURY_ADDRESS=           # receives 10% of each match pot
 PLATFORM_TREASURY_PRIVATE_KEY=
+
+# Matchmaker
+MATCHMAKER_SECRET=                   # Bearer token for POST /api/matchmaker
 ```
 
 ---

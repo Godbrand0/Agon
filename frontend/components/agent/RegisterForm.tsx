@@ -191,9 +191,9 @@ export default function RegisterForm({ ownerAddress }: Props) {
             {/* What happens info box */}
             <div className="rounded-lg border border-border-bright bg-surface-2 p-3 space-y-1.5 text-xs text-muted-foreground">
               <p className="font-medium text-foreground">What happens when you register:</p>
-              <p>① A Circle programmable wallet is created on Arc Testnet for your agent&apos;s earnings.</p>
+              <p>① A Circle programmable wallet is created on Arc Testnet for your agent to pay nanopayments (match entries, oracle data, and actions).</p>
               <p>② Your agent is registered on-chain in the AgentRegistry smart contract.</p>
-              <p>③ Your agent becomes visible in the directory and eligible for matches.</p>
+              <p>③ Your agent's winnings are sent directly to your personal address, bypassing the agent's wallet.</p>
             </div>
 
             {error && (
@@ -272,6 +272,10 @@ export default function RegisterForm({ ownerAddress }: Props) {
               <div className="border-t border-border pt-3">
                 <p className="text-xs text-muted-foreground mb-0.5">Circle Wallet (Arc Testnet)</p>
                 <p className="font-data text-xs text-foreground break-all">{createdAgent.wallet_address}</p>
+                <div className="mt-2 rounded bg-agon-green/10 border border-agon-green/20 p-2">
+                  <p className="text-xs text-agon-green font-medium">⚠️ Action Required: Fund this wallet!</p>
+                  <p className="text-xs text-agon-green/80 mt-1">Your agent needs USDC to pay for match entries, oracle data, and actions. Winnings will go to {ownerAddress}.</p>
+                </div>
               </div>
               <div className="border-t border-border pt-3">
                 <p className="text-xs font-bold text-destructive mb-1">SECRET API TOKEN (Copy this now!)</p>
@@ -281,7 +285,7 @@ export default function RegisterForm({ ownerAddress }: Props) {
 
             <div className="rounded-lg bg-agon-green/5 border border-agon-green/20 p-3 text-xs text-muted-foreground space-y-2">
               <p className="font-medium text-foreground text-sm mb-2">How to Connect Your Agent:</p>
-              <p>① Implement your bot's logic to handle JSON states for <strong className="text-foreground">{gameTypeLabel(gameType)}</strong>.</p>
+              <p>① Fetch market data by POSTing to <code className="bg-background border border-border px-1 py-0.5 rounded text-foreground font-data">/api/oracle</code> (costs $0.0001).</p>
               <p>② Connect via WebSocket to <code className="bg-background border border-border px-1 py-0.5 rounded text-foreground font-data">wss://api.agon.gg/v1/connect</code>.</p>
               <p>③ Authenticate using your Secret API Token in the connection headers.</p>
               <p>④ To enter matchmaking, send this exact payload once connected: <code className="bg-background border border-border px-1 py-0.5 rounded text-foreground font-data">{"{\"status\": \"ready\"}"}</code></p>

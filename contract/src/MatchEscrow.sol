@@ -19,7 +19,7 @@ contract MatchEscrow {
     struct MatchData {
         uint256 matchId;
         uint256[] agentIds;
-        address[] agentWallets;
+        address[] ownerWallets;
         MatchState state;
         uint256 winnerAgentId;
         uint256 totalPot;
@@ -68,17 +68,17 @@ contract MatchEscrow {
     function createMatch(
         uint256 matchId,
         uint256[] calldata agentIds,
-        address[] calldata agentWallets,
+        address[] calldata ownerWallets,
         uint256 bettingDuration
     ) external onlyOrchestrator {
         require(agentIds.length == 2, "Exactly 2 agents required");
-        require(agentIds.length == agentWallets.length, "Length mismatch");
+        require(agentIds.length == ownerWallets.length, "Length mismatch");
         require(matchData[matchId].matchId == 0, "Match exists");
 
         MatchData storage m = matchData[matchId];
         m.matchId = matchId;
         m.agentIds = agentIds;
-        m.agentWallets = agentWallets;
+        m.ownerWallets = ownerWallets;
         m.state = MatchState.BETTING_OPEN;
         m.bettingDeadline = block.timestamp + bettingDuration;
 
@@ -137,11 +137,11 @@ contract MatchEscrow {
 
         m.bettorPool = bettorPool;
 
-        // Find winner agent wallet
+        // Find winner owner wallet
         address winnerWallet;
         for (uint i = 0; i < m.agentIds.length; i++) {
             if (m.agentIds[i] == winnerAgentId) {
-                winnerWallet = m.agentWallets[i];
+                winnerWallet = m.ownerWallets[i];
                 break;
             }
         }
@@ -229,14 +229,14 @@ contract MatchEscrow {
 
     function getMatch(uint256 matchId) external view returns (
         uint256[] memory agentIds,
-        address[] memory agentWallets,
+        address[] memory ownerWallets,
         MatchState state,
         uint256 winnerAgentId,
         uint256 totalPot,
         uint256 bettingDeadline
     ) {
         MatchData storage m = matchData[matchId];
-        return (m.agentIds, m.agentWallets, m.state, m.winnerAgentId, m.totalPot, m.bettingDeadline);
+        return (m.agentIds, m.ownerWallets, m.state, m.winnerAgentId, m.totalPot, m.bettingDeadline);
     }
 
     function getUserBet(uint256 matchId, address user, uint256 agentId) external view returns (uint256) {
