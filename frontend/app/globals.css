@@ -55,8 +55,11 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* Agōn — refined dark palette */
+/* Agōn — refined dark palette (default theme) */
 :root {
+  color-scheme: dark;
+  --glass-bg: rgba(255, 255, 255, 0.04);
+  --glass-border: rgba(255, 255, 255, 0.08);
   --background: #0D0D14;
   --foreground: #EAEAF2;
   --card: #14141E;
@@ -101,6 +104,51 @@
   --sidebar-ring: #00FF94;
 }
 
+/* Agōn — light palette (html.light) */
+.light {
+  color-scheme: light;
+  --glass-bg: rgba(20, 20, 30, 0.03);
+  --glass-border: rgba(20, 20, 30, 0.09);
+  --background: #F6F7F9;
+  --foreground: #16161F;
+  --card: #FFFFFF;
+  --card-foreground: #16161F;
+  --popover: #FFFFFF;
+  --popover-foreground: #16161F;
+  --primary: #00A868;
+  --primary-foreground: #FFFFFF;
+  --secondary: #ECEDF2;
+  --secondary-foreground: #16161F;
+  --muted: #ECEDF2;
+  --muted-foreground: #676782;
+  --accent: #ECEDF2;
+  --accent-foreground: #16161F;
+  --destructive: #DC2626;
+  --destructive-foreground: #FFFFFF;
+  --border: #E3E4EC;
+  --input: #E3E4EC;
+  --ring: #00A868;
+
+  /* Agon brand extras — darker green for contrast on light surfaces */
+  --surface: #FFFFFF;
+  --surface-2: #EFF0F5;
+  --surface-glass: rgba(20, 20, 30, 0.03);
+  --border-bright: #D2D3E0;
+  --muted-bright: #4E4E6A;
+  --agon-green: #00A868;
+  --agon-green-dim: #008F58;
+
+  /* sidebar */
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #16161F;
+  --sidebar-primary: #00A868;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #ECEDF2;
+  --sidebar-accent-foreground: #16161F;
+  --sidebar-border: #E3E4EC;
+  --sidebar-ring: #00A868;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -108,7 +156,6 @@
   body {
     @apply bg-background text-foreground;
     -webkit-font-smoothing: antialiased;
-    color-scheme: dark;
   }
   html {
     @apply font-sans;
@@ -129,17 +176,20 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Glass card utility */
+/* Glass card utility — theme-aware */
 .glass-card {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--glass-bg);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--glass-border);
 }
 
 /* Green glow utility */
 .glow-green {
   box-shadow: 0 0 24px 0 rgba(0, 255, 148, 0.15);
+}
+.light .glow-green {
+  box-shadow: 0 0 20px 0 rgba(0, 168, 104, 0.22);
 }
 
 /* Thin scrollbar */

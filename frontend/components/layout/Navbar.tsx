@@ -6,6 +6,7 @@ import { motion } from "motion/react";
 import { cn } from "@/lib/utils";
 import { Swords, User, Wallet } from "lucide-react";
 import { useWallet } from "@/lib/wallet";
+import ThemeToggle from "./ThemeToggle";
 
 const NAV = [
   { href: "/arena",       label: "Arena" },
@@ -53,6 +54,7 @@ export default function Navbar() {
         </nav>
 
         <div className="flex items-center gap-2 ml-auto">
+          <ThemeToggle />
           {isConnected && (
             <Link
               href="/profile"
