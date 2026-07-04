@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { createPublicClient, http } from "viem";
-import { arcTestnet } from "@/lib/contracts";
+import { arcTestnet, isChainConfigured, simTxHash } from "@/lib/contracts";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -21,7 +21,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Minimum bet is 1 USDC" }, { status: 400 });
   }
 
-  if (!txHash) {
+  // With contracts live, an on-chain tx hash is mandatory. Without them,
+  // bets settle in simulated mode and get a `sim_` hash.
+  const chainLive = isChainConfigured();
+  if (chainLive && !txHash) {
     return NextResponse.json({ error: "On-chain transaction hash required" }, { status: 400 });
   }
 
@@ -44,18 +47,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Agent is not in this match" }, { status: 400 });
   }
 
-  const publicClient = createPublicClient({
-    chain: arcTestnet,
-    transport: http(process.env.NEXT_PUBLIC_ARC_RPC_URL),
-  });
+  if (chainLive && txHash) {
+    const publicClient = createPublicClient({
+      chain: arcTestnet,
+      transport: http(process.env.NEXT_PUBLIC_ARC_RPC_URL || process.env.ARC_RPC_URL),
+    });
 
-  try {
-    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash as `0x${string}` });
-    if (receipt.status !== "success") {
-      return NextResponse.json({ error: "Transaction failed on-chain" }, { status: 400 });
+    try {
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash as `0x${string}` });
+      if (receipt.status !== "success") {
+        return NextResponse.json({ error: "Transaction failed on-chain" }, { status: 400 });
+      }
+    } catch {
+      return NextResponse.json({ error: "Failed to verify on-chain transaction" }, { status: 400 });
     }
-  } catch {
-    return NextResponse.json({ error: "Failed to verify on-chain transaction" }, { status: 400 });
   }
 
   const { data: bet, error: betErr } = await db
@@ -65,7 +70,7 @@ export async function POST(req: NextRequest) {
       user_address: userAddress.toLowerCase(),
       agent_id: agentId,
       amount,
-      tx_hash: txHash,
+      tx_hash: txHash ?? simTxHash(),
     })
     .select()
     .single();

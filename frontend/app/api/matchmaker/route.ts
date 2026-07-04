@@ -19,13 +19,14 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { MatchOrchestrator } from "@/server/orchestrator";
 import type { GameType } from "@/lib/database.types";
 import {
-  getOrchestratorWallet,
+  tryGetOrchestratorWallet,
   MATCH_ESCROW_ABI,
   MATCH_ESCROW_ADDRESS,
 } from "@/lib/contracts";
-import { randomUUID } from "crypto";
+import { ENABLED_GAMES } from "@/lib/games-config";
 
-const GAME_TYPES: GameType[] = ["MARKET_MAKER", "LIQUIDITY_WARS", "DEBT_COLLECTOR"];
+// Only launch-enabled games get automated matches (others are locked)
+const GAME_TYPES: GameType[] = ENABLED_GAMES;
 const FIRST_MATCH_DELAY_MIN  = 5;   // betting window before match starts
 const STAGGER_MINUTES        = 20;  // gap between consecutive matches
 const BETTING_CLOSE_BEFORE_S = 120; // close betting 2 min before starts_at
@@ -130,7 +131,8 @@ async function scheduleMatch(
 
   // Register on-chain (best-effort — game runs even if this fails)
   try {
-    const wallet          = getOrchestratorWallet();
+    const wallet = tryGetOrchestratorWallet();
+    if (!wallet) throw new Error("chain not configured — running simulated");
     const contractMatchId = BigInt(Date.now());
 
     await wallet.writeContract({

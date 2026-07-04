@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
-import { X, CheckCircle } from "lucide-react";
+import { X, CheckCircle, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn, gameTypeBadgeColor, gameTypeLabel } from "@/lib/utils";
 import type { GameType } from "@/lib/database.types";
+import { ALL_GAMES, isGameEnabled } from "@/lib/games-config";
 
-const GAME_TYPES: GameType[] = ["MARKET_MAKER", "LIQUIDITY_WARS", "DEBT_COLLECTOR"];
+const GAME_TYPES: GameType[] = ALL_GAMES;
 
 const GAME_META: Record<GameType, { rounds: number; desc: string }> = {
   MARKET_MAKER:   { rounds: 10, desc: "Bid/ask spread competition on a synthetic asset with newsflow." },
@@ -107,21 +108,30 @@ export default function CreateMatchModal({ open, onClose }: Props) {
             <div className="mb-5">
               <label className="block text-sm font-medium text-foreground mb-2">Game Type</label>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                {GAME_TYPES.map((type) => (
-                  <button
-                    key={type}
-                    onClick={() => setGameType(type)}
-                    className={cn(
-                      "rounded-lg border p-2.5 text-left transition-all",
-                      gameType === type ? "border-agon-green bg-agon-green/5" : "border-border hover:border-border-bright"
-                    )}
-                  >
-                    <span className={cn("rounded-full border px-1.5 py-0.5 text-xs font-medium block mb-1", gameTypeBadgeColor(type))}>
-                      {gameTypeLabel(type)}
-                    </span>
-                    <p className="text-xs text-muted-foreground">{GAME_META[type].rounds} rounds</p>
-                  </button>
-                ))}
+                {GAME_TYPES.map((type) => {
+                  const locked = !isGameEnabled(type);
+                  return (
+                    <button
+                      key={type}
+                      disabled={locked}
+                      onClick={() => !locked && setGameType(type)}
+                      title={locked ? "Coming soon" : undefined}
+                      className={cn(
+                        "rounded-lg border p-2.5 text-left transition-all",
+                        locked
+                          ? "border-border opacity-40 cursor-not-allowed"
+                          : gameType === type ? "border-agon-green bg-agon-green/5" : "border-border hover:border-border-bright"
+                      )}
+                    >
+                      <span className={cn("rounded-full border px-1.5 py-0.5 text-xs font-medium block mb-1", gameTypeBadgeColor(type))}>
+                        {gameTypeLabel(type)}
+                      </span>
+                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                        {locked ? (<><Lock className="h-3 w-3" /> Coming soon</>) : `${GAME_META[type].rounds} rounds`}
+                      </p>
+                    </button>
+                  );
+                })}
               </div>
               <p className="mt-1.5 text-xs text-muted-foreground">{meta.desc}</p>
             </div>

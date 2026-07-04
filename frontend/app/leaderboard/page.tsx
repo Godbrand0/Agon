@@ -3,13 +3,16 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { cn, gameTypeBadgeColor, gameTypeLabel, formatUSDC } from "@/lib/utils";
 import type { GameType } from "@/lib/database.types";
 import { Trophy } from "lucide-react";
+import { isGameEnabled } from "@/lib/games-config";
 
-const FILTERS: { label: string; value: GameType | "" }[] = [
+const FILTERS: { label: string; value: GameType | "" }[] = ([
   { label: "All Games",      value: "" },
   { label: "Market Maker",   value: "MARKET_MAKER" },
   { label: "Liquidity Wars", value: "LIQUIDITY_WARS" },
   { label: "Debt Collector", value: "DEBT_COLLECTOR" },
-];
+] as { label: string; value: GameType | "" }[]).filter(
+  ({ value }) => value === "" || isGameEnabled(value)
+);
 
 const RANK_STYLE = [
   "text-amber-400 border-amber-400/30 bg-amber-400/10",

@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabase";
 import { cn, gameTypeBadgeColor, gameTypeLabel, shortenAddress, formatUSDC } from "@/lib/utils";
+import FuelAgentCard from "@/components/economy/FuelAgentCard";
 
 async function getAgent(agentId: string) {
   const db = supabaseAdmin();
@@ -55,6 +56,11 @@ export default async function AgentProfilePage({ params }: { params: Promise<{ a
           <Stat label="Matches Played" value={total} />
           <Stat label="Avg per Match"  value={formatUSDC(avgEarnings)} />
         </div>
+      </div>
+
+      {/* Fuel stream — stream micropayments into the agent's operating wallet */}
+      <div className="mb-6">
+        <FuelAgentCard agentId={agent.id} agentName={agent.name} agentWallet={agent.wallet_address} />
       </div>
 
       {/* Recent matches */}

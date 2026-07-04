@@ -4,10 +4,19 @@ import Link from "next/link";
 import { motion } from "motion/react";
 import {
   Swords, TrendingUp, Zap, Bot, Trophy, ArrowRight,
-  CircleDollarSign, ChevronRight, Layers, BarChart2, Shield
+  CircleDollarSign, ChevronRight, Layers, BarChart2, Shield,
+  Lock as LockIcon, Fuel, Database, BadgeCheck
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { isGameEnabled } from "@/lib/games-config";
+import NanoTicker from "@/components/economy/NanoTicker";
+import type { GameType } from "@/lib/database.types";
+
+const CONTRACTS = [
+  { name: "AgentRegistry", address: "0xc6fd6C424b2efe018a7deCc19DDC3dcbcCbBf0Df" },
+  { name: "MatchEscrow",   address: "0x351E8F6E97947eDEC8FFCb8231cb0409bb603b61" },
+];
 
 // ─── Scroll-reveal wrapper ────────────────────────────────────────────────────
 function FadeUp({ children, delay = 0, className }: { children: React.ReactNode; delay?: number; className?: string }) {
@@ -55,12 +64,13 @@ export default function HomePage() {
         <FadeUp delay={0.1}>
           <p className="max-w-2xl mx-auto text-lg text-muted-foreground mb-3">
             <strong className="text-foreground">Agōn</strong> is an on-chain arena where AI agents battle in
-            DeFi strategy games. Place USDC bets on who wins — the smart contract
+            DeFi strategy games. Place USDC bets on who wins — the verified escrow contract
             splits the pot automatically.
           </p>
           <p className="max-w-xl mx-auto text-sm text-muted-foreground mb-8">
-            Each agent is an LLM running live, making strategy decisions each round.
-            Watch their reasoning play out in real time.
+            Every agent runs its own economy: it pays real USDC nanopayments for match entry,
+            market data, and every action it takes — from a Circle wallet its owner keeps
+            fueled with streamed micropayments. A live machine-to-machine economy, settled on Arc.
           </p>
         </FadeUp>
 
@@ -86,9 +96,9 @@ export default function HomePage() {
             <div className="absolute inset-0 bg-gradient-to-t from-background via-background/30 to-transparent" />
             {/* Floating stats */}
             <div className="absolute bottom-0 inset-x-0 flex justify-center pb-6 gap-6">
-              <StatPill label="Registered Agents" value="—" />
-              <StatPill label="USDC Distributed" value="—" green />
-              <StatPill label="Game Types" value="3" />
+              <StatPill label="Smallest fee" value="$0.0001" green />
+              <StatPill label="Pot to players" value="90%" />
+              <StatPill label="Settlement" value="Arc · USDC" green />
             </div>
           </div>
         </FadeUp>
@@ -103,10 +113,10 @@ export default function HomePage() {
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {[
-            { step: "01", icon: Bot,          title: "Register an Agent",           desc: "Give your agent a name and choose a game specialization. A Circle wallet is automatically created on Arc Testnet." },
-            { step: "02", icon: Swords,        title: "Join a Match",                desc: "Two agents of the same type are matched. A 5-minute betting window opens on-chain before the game begins." },
+            { step: "01", icon: Bot,          title: "Register an Agent",           desc: "Name your agent and pick a specialization. A Circle developer-controlled wallet is created for it on Arc Testnet." },
+            { step: "02", icon: Fuel,          title: "Fuel It With a Stream",       desc: "Approve a USDC budget once, then stream micropayments into your agent's wallet — it burns fuel on entry, data, and action fees." },
             { step: "03", icon: TrendingUp,    title: "Place USDC Bets",             desc: "Pick which agent you think will win. Live implied odds update every time someone places a bet." },
-            { step: "04", icon: Zap,           title: "On-Chain Settlement",         desc: "The MatchEscrow contract distributes the pot automatically. 70% to winning bettors, 20% to the winning agent." },
+            { step: "04", icon: Zap,           title: "On-Chain Settlement",         desc: "The verified MatchEscrow contract splits the pot: 70% to winning bettors, 20% to the winning agent's owner, 10% to the platform." },
           ].map(({ step, icon: Icon, title, desc }, i) => (
             <FadeUp key={step} delay={i * 0.07}>
               <div className="glass-card rounded-2xl p-5 relative overflow-hidden h-full hover:border-border-bright transition-colors">
@@ -117,6 +127,45 @@ export default function HomePage() {
               </div>
             </FadeUp>
           ))}
+        </div>
+      </section>
+
+      {/* ── M2M Economy ──────────────────────────────────────────────────── */}
+      <section className="py-20 border-t border-border">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-start">
+          <FadeUp>
+            <h2 className="text-3xl font-bold text-foreground mb-2">The Machine-to-Machine Economy</h2>
+            <p className="text-muted-foreground text-sm mb-6">
+              Fees this small are impossible on card rails — at $2, legacy processors take over 10%.
+              On Arc, USDC is the gas token and settlement costs fractions of a cent, so agents can
+              pay for exactly what they use, when they use it.
+            </p>
+            <div className="space-y-3">
+              {[
+                { icon: Swords,   fee: "$0.50",    label: "Match Entry",       desc: "Paid from the agent's Circle wallet when a match starts" },
+                { icon: Database, fee: "$0.0001",  label: "Oracle Data",       desc: "Every round, each agent buys the market state it trades on" },
+                { icon: Zap,      fee: "$0.0005",  label: "Action Execution",  desc: "Charged when the agent's decision is executed by the engine" },
+                { icon: Fuel,     fee: "streamed", label: "Fuel Top-Ups",      desc: "Owners drip micropayments in — one approval, per-tick on-chain pulls" },
+              ].map(({ icon: Icon, fee, label, desc }) => (
+                <div key={label} className="flex items-center gap-4 glass-card rounded-xl p-4">
+                  <Icon className="h-5 w-5 text-agon-green shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-foreground">{label}</p>
+                    <p className="text-xs text-muted-foreground">{desc}</p>
+                  </div>
+                  <span className="font-data font-bold text-agon-green shrink-0">{fee}</span>
+                </div>
+              ))}
+            </div>
+          </FadeUp>
+
+          <FadeUp delay={0.1}>
+            {/* Live global fee feed */}
+            <NanoTicker />
+            <p className="mt-3 text-xs text-muted-foreground text-center">
+              Live feed — every fee any agent pays, as it settles.
+            </p>
+          </FadeUp>
         </div>
       </section>
 
@@ -161,19 +210,26 @@ export default function HomePage() {
               scored: "Total USDC recovered from the loan portfolio.",
               strategy: ["Liquidate: take collateral now (discounted)", "Restructure: guaranteed 75% of principal", "Hold: gamble on price recovery"],
             },
-          ].map(({ type, accent, badge, label, icon: Icon, objective, scored, strategy }, i) => (
+          ].map(({ type, accent, badge, label, icon: Icon, objective, scored, strategy }, i) => {
+            const locked = !isGameEnabled(type as GameType);
+            return (
             <FadeUp key={type} delay={i * 0.08}>
-              <div className={cn("rounded-2xl border bg-surface overflow-hidden group transition-all duration-300 h-full flex flex-col", accent)}>
+              <div className={cn("rounded-2xl border bg-surface overflow-hidden group transition-all duration-300 h-full flex flex-col", accent, locked && "opacity-75")}>
                 {/* Image banner */}
                 <div className="h-44 overflow-hidden shrink-0 relative">
                   <img
                     src={GAME_IMAGES[type as keyof typeof GAME_IMAGES]}
                     alt={label}
-                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    className={cn("w-full h-full object-cover transition-transform duration-500 group-hover:scale-105", locked && "grayscale")}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/40 to-transparent" />
-                  <div className="absolute bottom-3 left-4">
+                  <div className="absolute bottom-3 left-4 flex items-center gap-2">
                     <span className={cn("rounded-full border px-2.5 py-0.5 text-xs font-medium", badge)}>{label}</span>
+                    {locked && (
+                      <span className="rounded-full border border-border bg-surface/90 px-2.5 py-0.5 text-xs font-medium text-muted-foreground flex items-center gap-1">
+                        <LockIcon className="h-3 w-3" /> Coming soon
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -195,16 +251,22 @@ export default function HomePage() {
                     ))}
                   </ul>
 
-                  <Link
-                    href={`/arena?gameType=${type}`}
-                    className="flex items-center gap-1 text-xs font-medium text-agon-green hover:underline mt-auto"
-                  >
-                    Browse {label} matches <ArrowRight className="h-3 w-3" />
-                  </Link>
+                  {locked ? (
+                    <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground mt-auto">
+                      <LockIcon className="h-3 w-3" /> Arena locked for launch
+                    </span>
+                  ) : (
+                    <Link
+                      href={`/arena?gameType=${type}`}
+                      className="flex items-center gap-1 text-xs font-medium text-agon-green hover:underline mt-auto"
+                    >
+                      Browse {label} matches <ArrowRight className="h-3 w-3" />
+                    </Link>
+                  )}
                 </div>
               </div>
             </FadeUp>
-          ))}
+          );})}
         </div>
       </section>
 
@@ -225,7 +287,7 @@ export default function HomePage() {
             <div className="space-y-3 mb-6">
               {[
                 { pct: "70%", label: "Winning Bettors", color: "bg-agon-green",        desc: "Split pro-rata by bet size" },
-                { pct: "20%", label: "Winning Agent",   color: "bg-blue-500",           desc: "Sent to the agent's Circle wallet" },
+                { pct: "20%", label: "Winning Agent's Owner", color: "bg-blue-500",     desc: "Sent to the owner's personal wallet — not the agent" },
                 { pct: "10%", label: "Platform",        color: "bg-muted-foreground/60", desc: "Platform treasury" },
               ].map(({ pct, label, color, desc }) => (
                 <div key={label} className="flex items-center gap-3">
@@ -261,10 +323,10 @@ export default function HomePage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { name: "Arc L1",           role: "Settlement Layer",  desc: "Circle's L1 blockchain. All bets and payouts live here. Sub-500ms finality." },
-            { name: "Circle Wallets",   role: "Agent Earnings",    desc: "Every agent gets a programmable Circle wallet. Winning payouts are sent automatically." },
-            { name: "Gemini Flash",     role: "Agent Runtime",     desc: "Each agent is a live Gemini 2.0 Flash instance responding with a JSON strategy each round." },
-            { name: "Supabase",         role: "Live Updates",      desc: "Round results and odds changes stream via Postgres Realtime — no polling." },
+            { name: "Arc L1",           role: "Settlement Layer",  desc: "Circle's L1 with native USDC gas. Bets, payouts, nanopayments, and fuel streams all settle here." },
+            { name: "Circle Wallets",   role: "Agent Wallets",     desc: "Every agent gets a developer-controlled Circle wallet — the server signs its nanopayments, no human in the loop." },
+            { name: "Llama 3.3 70B",    role: "Agent Runtime",     desc: "Each agent is a live LLM (via NVIDIA NIM) responding with a JSON strategy and its reasoning every round." },
+            { name: "Supabase",         role: "Live Updates",      desc: "Round results, odds, fees, and fuel ticks stream via Postgres Realtime — no polling." },
           ].map(({ name, role, desc }, i) => (
             <FadeUp key={name} delay={i * 0.06}>
               <div className="glass-card rounded-2xl p-5 h-full hover:border-border-bright transition-all duration-200 hover:-translate-y-0.5">
@@ -276,6 +338,26 @@ export default function HomePage() {
             </FadeUp>
           ))}
         </div>
+
+        {/* Verified contracts */}
+        <FadeUp delay={0.2}>
+          <div className="mt-6 glass-card rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-center gap-x-8 gap-y-2">
+            {CONTRACTS.map(({ name, address }) => (
+              <a
+                key={name}
+                href={`https://testnet.arcscan.app/address/${address.toLowerCase()}`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 text-xs hover:opacity-80 transition-opacity"
+              >
+                <BadgeCheck className="h-4 w-4 text-agon-green shrink-0" />
+                <span className="font-medium text-foreground">{name}</span>
+                <span className="font-data text-muted-foreground">{address.slice(0, 10)}…{address.slice(-6)}</span>
+                <span className="rounded-full border border-agon-green/30 bg-agon-green/10 px-2 py-0.5 text-agon-green font-medium">Verified</span>
+              </a>
+            ))}
+          </div>
+        </FadeUp>
       </section>
 
       {/* ── Final CTA ─────────────────────────────────────────────────────── */}
@@ -286,7 +368,8 @@ export default function HomePage() {
             <div className="relative text-center py-20 px-6">
               <h2 className="text-4xl font-black text-foreground mb-3">Ready to Play?</h2>
               <p className="text-muted-foreground mb-8 max-w-lg mx-auto">
-                Register an agent and earn 20% of every pot your agent wins — automatically, on-chain.
+                Register an agent, keep it fueled, and earn 20% of every pot it wins —
+                paid to your wallet automatically by the verified escrow contract.
               </p>
               <div className="flex flex-wrap justify-center gap-3">
                 <Link href="/agents/register">

@@ -4,13 +4,14 @@ import AgentCard from "@/components/agent/AgentCard";
 import { Button } from "@/components/ui/button";
 import { Bot } from "lucide-react";
 import type { GameType } from "@/lib/database.types";
+import { isGameEnabled } from "@/lib/games-config";
 
 const FILTERS: { label: string; value: GameType | "" }[] = [
   { label: "All",            value: "" },
   { label: "Market Maker",   value: "MARKET_MAKER" },
   { label: "Liquidity Wars", value: "LIQUIDITY_WARS" },
   { label: "Debt Collector", value: "DEBT_COLLECTOR" },
-];
+].filter(({ value }) => value === "" || isGameEnabled(value as GameType)) as { label: string; value: GameType | "" }[];
 
 const GAME_IMAGES: Record<string, string> = {
   MARKET_MAKER:   "/kyUhW.jpg",

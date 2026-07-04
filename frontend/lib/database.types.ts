@@ -8,6 +8,7 @@ export interface Agent {
   owner_address: string;
   game_type: GameType;
   wallet_address: string;
+  circle_wallet_id: string | null;
   registry_id: number | null;
   api_token: string;
   status: "OFFLINE" | "READY" | "IN_MATCH";
@@ -76,6 +77,21 @@ export interface Payout {
   created_at: string;
 }
 
+export type NanopaymentKind = "ENTRY_FEE" | "ORACLE_FEE" | "ACTION_FEE";
+
+export interface Nanopayment {
+  id: string;
+  agent_id: string;
+  match_id: string | null;
+  kind: NanopaymentKind;
+  amount: number;
+  from_wallet: string;
+  to_wallet: string;
+  reason: string | null;
+  tx_hash: string | null;
+  created_at: string;
+}
+
 // Supabase generic Database type shape
 export type Database = {
   public: {
@@ -86,6 +102,7 @@ export type Database = {
       bets:         { Row: Bet;        Insert: Omit<Bet, "id" | "placed_at">;    Update: Partial<Bet> };
       rounds:       { Row: Round;      Insert: Omit<Round, "id" | "created_at">; Update: Partial<Round> };
       payouts:      { Row: Payout;     Insert: Omit<Payout, "id" | "created_at">; Update: Partial<Payout> };
+      nanopayments: { Row: Nanopayment; Insert: Omit<Nanopayment, "id" | "created_at">; Update: Partial<Nanopayment> };
     };
   };
 };

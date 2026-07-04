@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { createWalletClient, custom, type Hash } from "viem";
+import { createWalletClient, custom, type Hash, type EIP1193Provider } from "viem";
 import { arcTestnet, MATCH_ESCROW_ABI, MATCH_ESCROW_ADDRESS } from "./contracts";
 
 export function useWallet() {
@@ -22,7 +22,7 @@ export function useWallet() {
     try {
       const client = createWalletClient({
         chain: arcTestnet,
-        transport: custom((window as Window & { ethereum: unknown }).ethereum),
+        transport: custom(getEthereumProvider()),
       });
       const [addr] = await client.requestAddresses();
       setAddress(addr);
@@ -42,11 +42,11 @@ export function useWallet() {
   return { address, isConnected: !!address, isConnecting, connect, disconnect };
 }
 
-function getEthereumProvider(): unknown {
+function getEthereumProvider(): EIP1193Provider {
   if (typeof window === "undefined" || !("ethereum" in window)) {
     throw new Error("MetaMask not found");
   }
-  return (window as Window & { ethereum: unknown }).ethereum;
+  return (window as Window & { ethereum: EIP1193Provider }).ethereum;
 }
 
 const USDC_ABI = [
@@ -72,9 +72,12 @@ const USDC_ABI = [
   },
 ] as const;
 
-export async function approveUSDC(amount: number): Promise<Hash> {
+export async function approveUSDC(amount: number, spender?: string): Promise<Hash> {
   const usdcAddress = process.env.NEXT_PUBLIC_ARC_USDC_ADDRESS as `0x${string}`;
   if (!usdcAddress) throw new Error("USDC address not configured");
+
+  const spenderAddress = (spender ?? MATCH_ESCROW_ADDRESS) as `0x${string}`;
+  if (!spenderAddress) throw new Error("Spender address not configured");
 
   const client = createWalletClient({
     chain: arcTestnet,
@@ -83,16 +86,13 @@ export async function approveUSDC(amount: number): Promise<Hash> {
 
   const [account] = await client.requestAddresses();
 
-  const { writeContract } = await import("viem");
-  const hash = await (client as unknown as { writeContract: typeof writeContract }).writeContract({
+  return client.writeContract({
     address: usdcAddress,
     abi: USDC_ABI,
     functionName: "approve",
-    args: [MATCH_ESCROW_ADDRESS, BigInt(Math.round(amount * 1e6))],
+    args: [spenderAddress, BigInt(Math.round(amount * 1e6))],
     account,
   });
-
-  return hash as Hash;
 }
 
 export async function sendPlaceBetTx(
@@ -107,34 +107,26 @@ export async function sendPlaceBetTx(
 
   const [account] = await client.requestAddresses();
 
-  const { writeContract } = await import("viem");
-  const hash = await (client as unknown as { writeContract: typeof writeContract }).writeContract({
+  return client.writeContract({
     address: MATCH_ESCROW_ADDRESS,
     abi: MATCH_ESCROW_ABI,
     functionName: "placeBet",
     args: [BigInt(contractMatchId), BigInt(agentRegistryId), BigInt(Math.round(amount * 1e6))],
     account,
   });
-
-  return hash as Hash;
 }
 
 export async function sendClaimTx(contractMatchId: number, walletAddress: string): Promise<string> {
-  if (!("ethereum" in window)) throw new Error("MetaMask not found");
-
   const client = createWalletClient({
     chain: arcTestnet,
     transport: custom(getEthereumProvider()),
   });
 
-  const { writeContract } = await import("viem");
-  const hash = await (client as unknown as { writeContract: typeof writeContract }).writeContract({
+  return client.writeContract({
     address: MATCH_ESCROW_ADDRESS,
     abi: MATCH_ESCROW_ABI,
     functionName: "claimWinnings",
     args: [BigInt(contractMatchId)],
     account: walletAddress as `0x${string}`,
   });
-
-  return hash as string;
 }

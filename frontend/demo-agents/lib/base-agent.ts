@@ -4,25 +4,25 @@
  * Shared logic for all 4 demo agents:
  *  - Marks the agent READY in Supabase
  *  - Subscribes to Realtime for match assignments
- *  - Calls Gemini with a strategy-specific system prompt
+ *  - Calls NVIDIA NIM with a strategy-specific system prompt
  *  - Submits the JSON action back and logs results
  */
 
 import "dotenv/config";
 import { createClient, RealtimeChannel } from "@supabase/supabase-js";
-import { GoogleGenAI } from "@google/genai";
 
 const SUPABASE_URL      = process.env.SUPABASE_URL!;
 const SUPABASE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const GEMINI_API_KEY    = process.env.GEMINI_API_KEY!;
+const NVIDIA_API_KEY    = process.env.NVIDIA_API_KEY!;
+const NVIDIA_API_URL    = process.env.NVIDIA_API_URL || "https://integrate.api.nvidia.com/v1/chat/completions";
+const NVIDIA_MODEL      = process.env.NVIDIA_MODEL || "meta/llama-3.3-70b-instruct";
 
-if (!SUPABASE_URL || !SUPABASE_ROLE_KEY || !GEMINI_API_KEY) {
+if (!SUPABASE_URL || !SUPABASE_ROLE_KEY || !NVIDIA_API_KEY) {
   console.error("❌ Missing env vars. Copy .env.example to .env and fill it in.");
   process.exit(1);
 }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ROLE_KEY);
-const ai       = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
 const SHARED_SYSTEM_SUFFIX = `
 STRICT RESPONSE FORMAT:
@@ -40,7 +40,7 @@ export interface AgentConfig {
   apiToken:     string;
   gameType:     "MARKET_MAKER" | "LIQUIDITY_WARS";
   systemPrompt: string;          // strategy-specific personality
-  model?:       string;          // defaults to gemini-2.0-flash
+  model?:       string;          // defaults to NVIDIA_MODEL env / llama-3.3-70b
   temperature?: number;
 }
 
@@ -187,7 +187,7 @@ export class DemoAgent {
     }
   }
 
-  // ── Gemini action ─────────────────────────────────────────────────────────
+  // ── LLM action (NVIDIA NIM) ───────────────────────────────────────────────
 
   /**
    * Called by the orchestrator via runAgentTurn.
@@ -196,22 +196,48 @@ export class DemoAgent {
   async generateAction(prompt: string): Promise<Record<string, unknown>> {
     const systemPrompt = [this.cfg.systemPrompt, SHARED_SYSTEM_SUFFIX].join("\n\n");
 
-    const response = await ai.models.generateContent({
-      model: this.cfg.model ?? "gemini-2.0-flash",
-      contents: prompt,
-      config: {
-        systemInstruction: systemPrompt,
-        maxOutputTokens: 600,
-        temperature: this.cfg.temperature ?? 0.75,
+    const res = await fetch(NVIDIA_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${NVIDIA_API_KEY}`,
       },
+      body: JSON.stringify({
+        model: this.cfg.model ?? NVIDIA_MODEL,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: prompt },
+        ],
+        max_tokens: 600,
+        temperature: this.cfg.temperature ?? 0.75,
+      }),
+      signal: AbortSignal.timeout(25_000),
     });
 
-    const text = response.text ?? "";
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`NVIDIA API error ${res.status} for ${this.cfg.agentName}: ${body.slice(0, 300)}`);
+    }
+
+    const data = await res.json();
+    const text: string = data.choices?.[0]?.message?.content ?? "";
+
+    const cleaned = text
+      .replace(/<think>[\s\S]*?<\/think>/g, "")
+      .replace(/```json|```/g, "")
+      .trim();
+
     try {
-      const clean = text.replace(/```json|```/g, "").trim();
-      return JSON.parse(clean);
+      return JSON.parse(cleaned);
     } catch {
-      throw new Error(`${this.cfg.agentName} returned invalid JSON: ${text}`);
+      const start = cleaned.indexOf("{");
+      const end = cleaned.lastIndexOf("}");
+      if (start !== -1 && end > start) {
+        try {
+          return JSON.parse(cleaned.slice(start, end + 1));
+        } catch { /* fall through */ }
+      }
+      throw new Error(`${this.cfg.agentName} returned invalid JSON: ${text.slice(0, 300)}`);
     }
   }
 

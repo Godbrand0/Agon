@@ -7,22 +7,28 @@
  * Copy those into your .env file before running the agent runners.
  */
 
-import "dotenv/config";
 import { createClient } from "@supabase/supabase-js";
+import { initiateDeveloperControlledWalletsClient } from "@circle-fin/developer-controlled-wallets";
+import { privateKeyToAccount } from "viem/accounts";
 import crypto from "crypto";
 import { randomUUID } from "crypto";
 
-const SUPABASE_URL      = process.env.SUPABASE_URL!;
+// Run with: node --env-file=.env.local --import tsx demo-agents/seed.ts
+const SUPABASE_URL      = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const OWNER_ADDRESS     = process.env.OWNER_ADDRESS!;
-const PLATFORM_URL      = process.env.PLATFORM_URL ?? "http://localhost:3000";
+// Owner payout address: explicit OWNER_ADDRESS, else derived from the orchestrator key
+const OWNER_ADDRESS =
+  process.env.OWNER_ADDRESS ||
+  (process.env.ORCHESTRATOR_PRIVATE_KEY
+    ? privateKeyToAccount(process.env.ORCHESTRATOR_PRIVATE_KEY as `0x${string}`).address
+    : "");
 
 if (!SUPABASE_URL || !SUPABASE_ROLE_KEY) {
   console.error("❌ Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env");
   process.exit(1);
 }
 if (!OWNER_ADDRESS) {
-  console.error("❌ Missing OWNER_ADDRESS in .env");
+  console.error("❌ Missing OWNER_ADDRESS (or ORCHESTRATOR_PRIVATE_KEY to derive it) in .env");
   process.exit(1);
 }
 
@@ -35,6 +41,43 @@ function generateApiToken(gameType: string): string {
 
 function generateWalletAddress(): string {
   return `0x${crypto.randomBytes(20).toString("hex")}`;
+}
+
+// ── Optional: real Circle dev-controlled wallets on Arc Testnet ─────────────
+const circleConfigured = Boolean(process.env.CIRCLE_API_KEY && process.env.CIRCLE_ENTITY_SECRET);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let circleClient: any = null;
+let walletSetId: string | null = process.env.CIRCLE_WALLET_SET_ID ?? null;
+
+async function createCircleWallet(agentId: string): Promise<{ address: string; circleWalletId: string } | null> {
+  if (!circleConfigured) return null;
+  try {
+    if (!circleClient) {
+      circleClient = initiateDeveloperControlledWalletsClient({
+        apiKey: process.env.CIRCLE_API_KEY!,
+        entitySecret: process.env.CIRCLE_ENTITY_SECRET!,
+      });
+    }
+    if (!walletSetId) {
+      const res = await circleClient.createWalletSet({ name: "Agon Agent Wallets" });
+      walletSetId = res?.data?.walletSet?.id ?? null;
+      if (walletSetId) console.log(`   ℹ️  Created wallet set ${walletSetId} — add CIRCLE_WALLET_SET_ID=${walletSetId} to .env`);
+    }
+    if (!walletSetId) return null;
+
+    const res = await circleClient.createWallets({
+      walletSetId,
+      blockchains: ["ARC-TESTNET"],
+      count: 1,
+      accountType: "EOA",
+      metadata: [{ name: `agent-${agentId}`, refId: agentId }],
+    });
+    const w = res?.data?.wallets?.[0];
+    return w?.address && w?.id ? { address: w.address, circleWalletId: w.id } : null;
+  } catch (e) {
+    console.warn("   ⚠️ Circle wallet creation failed, using placeholder:", e);
+    return null;
+  }
 }
 
 const AGENTS = [
@@ -68,10 +111,15 @@ async function seed() {
   console.log("🌱 Seeding demo agents...\n");
   const envLines: string[] = [];
 
-  for (const agent of AGENTS) {
-    const id             = randomUUID();
-    const api_token      = generateApiToken(agent.game_type);
-    const wallet_address = generateWalletAddress();
+  // Launch lock: only Market Maker is live — skip agents for locked games
+  const enabledAgents = AGENTS.filter((a) => a.game_type === "MARKET_MAKER");
+
+  for (const agent of enabledAgents) {
+    const id        = randomUUID();
+    const api_token = generateApiToken(agent.game_type);
+
+    const circleWallet   = await createCircleWallet(id);
+    const wallet_address = circleWallet?.address ?? generateWalletAddress();
 
     const { error } = await supabase.from("agents").insert({
       id,
@@ -79,6 +127,7 @@ async function seed() {
       game_type:     agent.game_type,
       owner_address: OWNER_ADDRESS.toLowerCase(),
       wallet_address,
+      circle_wallet_id: circleWallet?.circleWalletId ?? null,
       api_token,
       status:        "OFFLINE",
       active:        true,

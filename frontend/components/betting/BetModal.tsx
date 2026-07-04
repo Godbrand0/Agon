@@ -38,27 +38,38 @@ export default function BetModal({
   const payout = calculateExpectedPayout(amount, speculativeTotalOnAgent, speculativeTotalPot);
   const profit = calculateExpectedProfit(amount, speculativeTotalOnAgent, speculativeTotalPot);
 
+  // On-chain betting needs deployed contracts + a match registered on-chain.
+  // Otherwise fall back to simulated settlement (bet recorded server-side).
+  const chainReady = Boolean(
+    process.env.NEXT_PUBLIC_MATCH_ESCROW_ADDRESS &&
+    process.env.NEXT_PUBLIC_ARC_USDC_ADDRESS &&
+    contractMatchId &&
+    agentRegistryId
+  );
+
   async function handleConfirm() {
     if (amount < 1) return;
     setError(null);
 
     try {
-      if (!contractMatchId || !agentRegistryId) throw new Error("Match not yet created on-chain");
+      let txHash: string | undefined;
 
-      setStep("approving");
-      await approveUSDC(amount);
+      if (chainReady) {
+        setStep("approving");
+        await approveUSDC(amount);
 
-      setStep("signing");
-      const txHash = await sendPlaceBetTx(contractMatchId, agentRegistryId, amount);
+        setStep("signing");
+        txHash = await sendPlaceBetTx(contractMatchId!, agentRegistryId!, amount);
 
-      setStep("confirming");
-      const { createPublicClient, http } = await import("viem");
-      const { arcTestnet } = await import("@/lib/contracts");
-      const publicClient = createPublicClient({
-        chain: arcTestnet,
-        transport: http(process.env.NEXT_PUBLIC_ARC_RPC_URL),
-      });
-      await publicClient.waitForTransactionReceipt({ hash: txHash });
+        setStep("confirming");
+        const { createPublicClient, http } = await import("viem");
+        const { arcTestnet } = await import("@/lib/contracts");
+        const publicClient = createPublicClient({
+          chain: arcTestnet,
+          transport: http(process.env.NEXT_PUBLIC_ARC_RPC_URL),
+        });
+        await publicClient.waitForTransactionReceipt({ hash: txHash as `0x${string}` });
+      }
 
       setStep("recording");
       const res = await fetch("/api/bets/place", {
@@ -118,14 +129,15 @@ export default function BetModal({
           >
             <div className="flex items-center justify-between mb-5">
               <h2 className="font-semibold text-foreground">Place Bet</h2>
-            <button onClick={handleClose} className="text-muted-foreground hover:text-foreground transition-colors">
-              <X className="h-4 w-4" />
-            </button>
+              <button onClick={handleClose} className="text-muted-foreground hover:text-foreground transition-colors">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
 
             {step === "done" ? (
               <div className="text-center py-6">
                 <p className="text-2xl mb-2">🎉</p>
-                <p className="font-semibold text-agon-green">Bet placed on-chain!</p>
+                <p className="font-semibold text-agon-green">Bet placed!</p>
               </div>
             ) : step === "error" ? (
               <div className="text-center py-6 space-y-3">
@@ -165,7 +177,9 @@ export default function BetModal({
                 </div>
 
                 <p className="text-xs text-muted-foreground mb-4">
-                  You will sign two transactions: USDC approval, then the on-chain bet. Bets are final.
+                  {chainReady
+                    ? "You will sign two transactions: USDC approval, then the on-chain bet. Bets are final."
+                    : "Demo settlement: your bet is recorded instantly with simulated USDC. Bets are final."}
                 </p>
 
                 {isBusy && (

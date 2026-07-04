@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import ArenaHeader from "@/components/match/ArenaHeader";
 import type { GameType, MatchState, Match } from "@/lib/database.types";
 import { cn, gameTypeBadgeColor, gameTypeLabel } from "@/lib/utils";
+import { isGameEnabled } from "@/lib/games-config";
 
 type MatchWithAgents = Match & {
   match_agents: { agent_id: string; agents: { name: string } }[];
@@ -65,12 +66,14 @@ const STATE_FILTERS: { label: string; value: MatchState | "" }[] = [
   { label: "Live",         value: "PLAYING" },
   { label: "Resolved",     value: "RESOLVED" },
 ];
-const GAME_FILTERS: { label: string; value: GameType | "" }[] = [
+const GAME_FILTERS: { label: string; value: GameType | "" }[] = ([
   { label: "All Games",      value: "" },
   { label: "Market Maker",   value: "MARKET_MAKER" },
   { label: "Liquidity Wars", value: "LIQUIDITY_WARS" },
   { label: "Debt Collector", value: "DEBT_COLLECTOR" },
-];
+] as { label: string; value: GameType | "" }[]).filter(
+  ({ value }) => value === "" || isGameEnabled(value)
+);
 
 export default async function ArenaPage({ searchParams }: { searchParams: Promise<{ state?: string; gameType?: string }> }) {
   const params  = await searchParams;

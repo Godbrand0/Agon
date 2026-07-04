@@ -8,6 +8,7 @@ import GameplayViewer from "@/components/match/GameplayViewer";
 import PreMatchPanel from "@/components/match/PreMatchPanel";
 import BetModal from "@/components/betting/BetModal";
 import ClaimCard from "@/components/betting/ClaimCard";
+import NanoTicker from "@/components/economy/NanoTicker";
 import type { Match, Round } from "@/lib/database.types";
 import type { RoundResult } from "@/games/types";
 import { useWallet } from "@/lib/wallet";
@@ -15,12 +16,13 @@ import { useWallet } from "@/lib/wallet";
 interface AgentInMatch {
   agent_id: string;
   final_score: number | null;
-  agents: { id: string; name: string; wins: number; losses: number };
+  agents: { id: string; name: string; wins: number; losses: number; registry_id: number | null };
 }
 
 interface MatchDetail extends Match {
   match_agents: AgentInMatch[];
   rounds: Round[];
+  betsByAgent?: Record<string, number>;
 }
 
 export default function MatchPage() {
@@ -86,10 +88,11 @@ export default function MatchPage() {
   const showGameplay = isLive || isResolved || bettingClosed;
 
   const agents = match.match_agents.map((ma) => ({
-    id:     ma.agent_id,
-    name:   ma.agents?.name ?? ma.agent_id.slice(0, 8),
-    wins:   ma.agents?.wins ?? 0,
-    losses: ma.agents?.losses ?? 0,
+    id:         ma.agent_id,
+    name:       ma.agents?.name ?? ma.agent_id.slice(0, 8),
+    wins:       ma.agents?.wins ?? 0,
+    losses:     ma.agents?.losses ?? 0,
+    registryId: ma.agents?.registry_id ?? null,
   }));
 
   const rounds: RoundResult[] = (match.rounds ?? []).map((r) => ({
@@ -243,6 +246,9 @@ export default function MatchPage() {
               </div>
             </div>
           )}
+
+          {/* Live M2M fee feed for this match */}
+          <NanoTicker matchId={match.id} />
         </div>
       </div>
 
@@ -254,9 +260,11 @@ export default function MatchPage() {
           matchId={match.id}
           matchLabel={`${gameTypeLabel(match.game_type)} · ${agents.map((a) => a.name).join(" vs ")}`}
           agentId={betModal.agentId}
+          agentRegistryId={agents.find((a) => a.id === betModal.agentId)?.registryId ?? null}
           agentName={betModal.agentName}
+          contractMatchId={match.contract_match_id}
           totalPot={match.total_pot}
-          totalBetsOnAgent={0}
+          totalBetsOnAgent={match.betsByAgent?.[betModal.agentId] ?? 0}
           userAddress={address ?? "0xDemoUser"}
         />
       )}

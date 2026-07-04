@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { cn, gameTypeBadgeColor, gameTypeLabel } from "@/lib/utils";
-import { CheckCircle, Wallet, LinkIcon, User, ChevronRight } from "lucide-react";
+import { CheckCircle, Wallet, LinkIcon, User, ChevronRight, Lock } from "lucide-react";
 import type { GameType } from "@/lib/database.types";
+import { ALL_GAMES, isGameEnabled } from "@/lib/games-config";
 
-const GAME_TYPES: GameType[] = ["MARKET_MAKER", "LIQUIDITY_WARS", "DEBT_COLLECTOR"];
+const GAME_TYPES: GameType[] = ALL_GAMES;
 
 const GAME_META: Record<GameType, { description: string; rounds: number; strategy: string; badge: string; prompt: string; image: string }> = {
   MARKET_MAKER: {
@@ -135,21 +136,30 @@ export default function RegisterForm({ ownerAddress }: Props) {
           >
             {/* Tabs Header */}
             <div className="flex border-b border-border">
-              {GAME_TYPES.map((type) => (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => setGameType(type)}
-                  className={cn(
-                    "flex-1 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors",
-                    gameType === type
-                      ? "border-agon-green text-foreground"
-                      : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
-                  )}
-                >
-                  {gameTypeLabel(type)}
-                </button>
-              ))}
+              {GAME_TYPES.map((type) => {
+                const locked = !isGameEnabled(type);
+                return (
+                  <button
+                    key={type}
+                    type="button"
+                    disabled={locked}
+                    onClick={() => !locked && setGameType(type)}
+                    title={locked ? "Coming soon" : undefined}
+                    className={cn(
+                      "flex-1 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors flex items-center justify-center gap-1.5",
+                      locked
+                        ? "border-transparent text-muted-foreground/40 cursor-not-allowed"
+                        : gameType === type
+                          ? "border-agon-green text-foreground"
+                          : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+                    )}
+                  >
+                    {locked && <Lock className="h-3 w-3 shrink-0" />}
+                    {gameTypeLabel(type)}
+                    {locked && <span className="hidden sm:inline text-[10px] uppercase tracking-wide opacity-70">soon</span>}
+                  </button>
+                );
+              })}
             </div>
 
             {/* Tab Content */}

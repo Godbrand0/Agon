@@ -38,7 +38,8 @@ export async function POST(req: NextRequest) {
       agent.id,
       agent.wallet_address || "unknown",
       DATA_ORACLE_FEE,
-      `Data Oracle Request for ${gameType}`
+      `Data Oracle Request for ${gameType}`,
+      { kind: "ORACLE_FEE" }
     );
     
     if (!paymentSuccess) {

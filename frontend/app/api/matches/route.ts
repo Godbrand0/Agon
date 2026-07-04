@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import {
-  getOrchestratorWallet,
+  tryGetOrchestratorWallet,
   MATCH_ESCROW_ABI,
   MATCH_ESCROW_ADDRESS,
 } from "@/lib/contracts";
 import { MatchOrchestrator } from "@/server/orchestrator";
 import type { GameType, MatchState } from "@/lib/database.types";
+import { isGameEnabled, GAME_LOCKED_MESSAGE } from "@/lib/games-config";
 
 const STAGGER_MINUTES = 20;      // minimum gap between match start times
 const FIRST_MATCH_DELAY_MIN = 10; // first match starts 10 min from now
@@ -43,6 +44,10 @@ export async function POST(req: NextRequest) {
 
   if (!gameType || !agentIds || agentIds.length !== 2) {
     return NextResponse.json({ error: "gameType and exactly 2 agentIds required" }, { status: 400 });
+  }
+
+  if (!isGameEnabled(gameType)) {
+    return NextResponse.json({ error: GAME_LOCKED_MESSAGE }, { status: 403 });
   }
 
   const db = supabaseAdmin();
@@ -104,37 +109,43 @@ export async function POST(req: NextRequest) {
     agentIds.map((agentId) => ({ match_id: match.id, agent_id: agentId }))
   );
 
-  try {
-    const wallet = getOrchestratorWallet();
-    const contractMatchId = BigInt(Date.now());
+  // On-chain escrow registration is best-effort: if the chain is not
+  // configured or the call fails, the match still runs with simulated
+  // settlement — never cancel a scheduled match over it.
+  let contractMatchId: number | null = null;
+  const wallet = tryGetOrchestratorWallet();
+  if (wallet) {
+    try {
+      const onChainId = BigInt(Date.now());
 
-    await wallet.writeContract({
-      address: MATCH_ESCROW_ADDRESS,
-      abi: MATCH_ESCROW_ABI,
-      functionName: "createMatch",
-      args: [
-        contractMatchId,
-        agents.map((a) => BigInt(a.registry_id ?? 0)),
-        agents.map((a) => a.owner_address as `0x${string}`),
-        BigInt(Math.floor(delayUntilStartMs / 1000)),
-      ],
-    });
+      await wallet.writeContract({
+        address: MATCH_ESCROW_ADDRESS,
+        abi: MATCH_ESCROW_ABI,
+        functionName: "createMatch",
+        args: [
+          onChainId,
+          agents.map((a) => BigInt(a.registry_id ?? 0)),
+          agents.map((a) => a.owner_address as `0x${string}`),
+          BigInt(Math.floor(delayUntilStartMs / 1000)),
+        ],
+      });
 
-    await db.from("matches").update({ contract_match_id: Number(contractMatchId) }).eq("id", match.id);
-
-    // Kick off orchestrator at scheduled start time
-    setTimeout(async () => {
-      try {
-        const orch = new MatchOrchestrator();
-        await orch.runMatch(match.id);
-      } catch (e) {
-        console.error("Orchestrator error for match", match.id, e);
-      }
-    }, delayUntilStartMs);
-
-    return NextResponse.json({ ...match, contract_match_id: Number(contractMatchId) });
-  } catch (err) {
-    await db.from("matches").update({ state: "CANCELLED" }).eq("id", match.id);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+      contractMatchId = Number(onChainId);
+      await db.from("matches").update({ contract_match_id: contractMatchId }).eq("id", match.id);
+    } catch (err) {
+      console.warn("[matches] on-chain createMatch failed (continuing simulated):", err);
+    }
   }
+
+  // Kick off orchestrator at scheduled start time
+  setTimeout(async () => {
+    try {
+      const orch = new MatchOrchestrator();
+      await orch.runMatch(match.id);
+    } catch (e) {
+      console.error("Orchestrator error for match", match.id, e);
+    }
+  }, delayUntilStartMs);
+
+  return NextResponse.json({ ...match, contract_match_id: contractMatchId });
 }

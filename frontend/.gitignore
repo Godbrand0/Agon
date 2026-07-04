@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Circle entity secret recovery files
+.circle-recovery.dat
+recovery_file_*.dat
