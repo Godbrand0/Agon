@@ -51,8 +51,10 @@ function stateLabel(match: MatchWithAgents) {
 async function getMatches(state?: string, gameType?: string): Promise<MatchWithAgents[]> {
   try {
     const db = supabaseAdmin();
+    // Descending + limit so the 40 kept are the most recent, not the oldest
+    // (ascending+limit would silently drop new matches once there are >40)
     let query = db.from("matches").select("*, match_agents(agent_id, agents(name))")
-      .order("starts_at", { ascending: true }).limit(40);
+      .order("starts_at", { ascending: false }).limit(40);
     if (state)    query = query.eq("state", state as MatchState);
     if (gameType) query = query.eq("game_type", gameType as GameType);
     const { data } = await query;
@@ -78,8 +80,18 @@ const GAME_FILTERS: { label: string; value: GameType | "" }[] = ([
 export default async function ArenaPage({ searchParams }: { searchParams: Promise<{ state?: string; gameType?: string }> }) {
   const params  = await searchParams;
   const matches = await getMatches(params.state, params.gameType);
-  const upcoming = matches.filter((m) => m.state !== "RESOLVED");
-  const resolved  = matches.filter((m) => m.state === "RESOLVED");
+  // Upcoming: soonest-starting first. Past: most recently resolved first.
+  // (base query is ordered newest-created-first so the limit keeps recent
+  // matches — each list re-sorts into the direction that reads naturally.)
+  const upcoming = matches
+    .filter((m) => m.state !== "RESOLVED")
+    .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime());
+  const resolved = matches
+    .filter((m) => m.state === "RESOLVED")
+    .sort((a, b) =>
+      new Date(b.resolved_at ?? b.created_at).getTime() -
+      new Date(a.resolved_at ?? a.created_at).getTime()
+    );
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
