@@ -11,8 +11,16 @@
  * stream-engine code the frontend already has (imported by relative path,
  * not duplicated) — so there's one source of truth for match logic, and
  * this process just supplies the "stays alive" part that was missing.
+ *
+ * Render's free tier only offers Web Services, not Background Workers —
+ * so this also binds a trivial HTTP health-check endpoint on $PORT to pass
+ * as a "web service" while the actual work happens in the poll loop below.
+ * Free web services still sleep after ~15 min with no HTTP traffic, so pair
+ * this with an external uptime pinger (e.g. UptimeRobot, cron-job.org) hitting
+ * the deployed URL every ~10 minutes to keep it awake.
  */
 
+import http from "node:http";
 import { supabaseAdmin } from "../frontend/lib/supabase";
 import { MatchOrchestrator } from "../frontend/server/orchestrator";
 import { resumeActiveStreams } from "../frontend/server/stream-engine";
@@ -66,6 +74,15 @@ async function main() {
 
   setInterval(() => void pollDueMatches(), POLL_INTERVAL_MS);
   void pollDueMatches(); // don't wait a full interval for the first check
+
+  // Render (and most PaaS "web service" health checks) require a bound port
+  const port = Number(process.env.PORT) || 3001;
+  http
+    .createServer((_req, res) => {
+      res.writeHead(200, { "Content-Type": "text/plain" });
+      res.end("Agōn scheduler is running.\n");
+    })
+    .listen(port, () => console.log(`[scheduler] health check listening on :${port}`));
 }
 
 process.on("SIGTERM", () => {

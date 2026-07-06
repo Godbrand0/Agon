@@ -1,12 +1,20 @@
 # Render Blueprint for the Agōn backend worker.
 #
-# This is a Background Worker (no HTTP port) — it's the persistent process
-# that Vercel serverless can't provide. Vercel kills functions as soon as
-# they respond, so the setTimeout-based match scheduling and the in-memory
-# fuel-stream loop (both in frontend/server/*.ts) never actually fire in
-# production. This worker imports that same code by relative path (one
-# source of truth — no duplicated orchestrator logic) and polls Supabase
-# directly for matches that are due to start.
+# This is the persistent process that Vercel serverless can't provide —
+# Vercel kills functions as soon as they respond, so the setTimeout-based
+# match scheduling and the in-memory fuel-stream loop (both in
+# frontend/server/*.ts) never actually fire in production. This worker
+# imports that same code by relative path (one source of truth — no
+# duplicated orchestrator logic) and polls Supabase directly for matches
+# that are due to start.
+#
+# Deployed as `type: web` (not `worker`) because Render's free tier only
+# offers Background Workers on paid plans — a Web Service is free, so
+# backend/scheduler.ts binds a trivial HTTP health-check on $PORT and runs
+# the actual poll loop alongside it. Free web services sleep after ~15 min
+# with no HTTP traffic — set up a free uptime pinger (UptimeRobot,
+# cron-job.org, etc.) hitting this service's URL every ~10 minutes to keep
+# it awake, or upgrade to a paid plan for guaranteed uptime.
 #
 # To deploy: in the Render dashboard, New -> Blueprint -> point at this repo.
 # Render will read this file and create the service below. You'll be
@@ -14,7 +22,7 @@
 # values from frontend/.env.local.
 
 services:
-  - type: worker
+  - type: web
     name: agon-scheduler
     runtime: node
     plan: free
