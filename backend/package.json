@@ -1,0 +1,14 @@
+{
+  "name": "agon-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Persistent worker for Agōn — runs scheduled matches and fuel streams. Vercel serverless functions terminate on response, so the setTimeout-based scheduling in frontend/server/*.ts needs a long-lived process to actually fire; this is that process.",
+  "scripts": {
+    "start": "node --import tsx scheduler.ts",
+    "dev": "node --env-file=../frontend/.env.local --import tsx scheduler.ts"
+  },
+  "dependencies": {
+    "tsx": "^4.22.5",
+    "typescript": "^5"
+  }
+}

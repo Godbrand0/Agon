@@ -1,0 +1,59 @@
+# Render Blueprint for the Agōn backend worker.
+#
+# This is a Background Worker (no HTTP port) — it's the persistent process
+# that Vercel serverless can't provide. Vercel kills functions as soon as
+# they respond, so the setTimeout-based match scheduling and the in-memory
+# fuel-stream loop (both in frontend/server/*.ts) never actually fire in
+# production. This worker imports that same code by relative path (one
+# source of truth — no duplicated orchestrator logic) and polls Supabase
+# directly for matches that are due to start.
+#
+# To deploy: in the Render dashboard, New -> Blueprint -> point at this repo.
+# Render will read this file and create the service below. You'll be
+# prompted to fill in the secret env vars (marked sync: false) — copy their
+# values from frontend/.env.local.
+
+services:
+  - type: worker
+    name: agon-scheduler
+    runtime: node
+    plan: free
+    buildCommand: "cd frontend && npm install && cd ../backend && npm install"
+    startCommand: "cd backend && npm start"
+    envVars:
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: NVIDIA_API_KEY
+        sync: false
+      - key: NVIDIA_API_URL
+        sync: false
+      - key: NVIDIA_MODEL
+        sync: false
+      - key: ARC_RPC_URL
+        sync: false
+      - key: NEXT_PUBLIC_ARC_RPC_URL
+        sync: false
+      - key: ARC_CHAIN_ID
+        sync: false
+      - key: ARC_USDC_ADDRESS
+        sync: false
+      - key: NEXT_PUBLIC_ARC_USDC_ADDRESS
+        sync: false
+      - key: ORCHESTRATOR_PRIVATE_KEY
+        sync: false
+      - key: NEXT_PUBLIC_AGENT_REGISTRY_ADDRESS
+        sync: false
+      - key: NEXT_PUBLIC_MATCH_ESCROW_ADDRESS
+        sync: false
+      - key: CIRCLE_API_KEY
+        sync: false
+      - key: CIRCLE_ENTITY_SECRET
+        sync: false
+      - key: CIRCLE_WALLET_SET_ID
+        sync: false
+      - key: PROTOCOL_WALLET_ADDRESS
+        sync: false
+      - key: PLATFORM_TREASURY_ADDRESS
+        sync: false

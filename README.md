@@ -194,9 +194,22 @@ node --env-file=.env.local --import tsx scripts/run-test-match.ts 5
 
 # 6. Launch
 pnpm dev   # → http://localhost:3000
+
+# 7. Backend worker (only needed if the frontend is deployed to a
+#    serverless host like Vercel — see "Backend worker" below)
+cd ../backend && npm install
+npm run dev   # local test run, reuses frontend/.env.local
 ```
 
 > **Launch lock:** three game engines are implemented (Market Maker Duel, Liquidity Wars, Debt Collector) but only **Market Maker Duel** is live — the other arenas are locked in the UI and rejected by the API (`frontend/lib/games-config.ts`), keeping the demo focused.
+
+### Backend worker
+
+Match scheduling and fuel streams both rely on a long-lived process (`setTimeout` for match start, an in-memory loop for stream ticks). That works fine under `pnpm dev`, but **Vercel serverless functions terminate as soon as they respond** — so on a Vercel deployment, matches get created and stuck in `BETTING_OPEN` forever, and fuel streams never tick.
+
+`backend/` is a small persistent worker that fixes this: it polls Supabase every 5s for matches whose betting deadline has passed and drives them through `MatchOrchestrator` — the *same* orchestrator code the frontend already has, imported by relative path so there's one source of truth (no duplicated match logic to drift out of sync). It also resumes active fuel streams on boot.
+
+Deploy `backend/` as a **Background Worker** (not a web service — it has no HTTP port) on Render using the included [`render.yaml`](render.yaml) blueprint: New → Blueprint → point at this repo → fill in the secret env vars from `frontend/.env.local` when prompted.
 
 ---
 
