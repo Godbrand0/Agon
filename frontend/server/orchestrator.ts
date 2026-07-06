@@ -6,12 +6,41 @@ import { chargeNanopayment } from "../lib/circle";
 import { sleep } from "../lib/utils";
 import {
   tryGetOrchestratorWallet,
+  getPublicClient,
   simTxHash,
   MATCH_ESCROW_ABI,
   MATCH_ESCROW_ADDRESS,
   AGENT_REGISTRY_ABI,
   AGENT_REGISTRY_ADDRESS,
 } from "../lib/contracts";
+
+type OrchestratorWallet = NonNullable<ReturnType<typeof tryGetOrchestratorWallet>>;
+
+/**
+ * Send a contract write and wait for its receipt. Sequential writes from the
+ * same wallet MUST wait between sends — firing closeBetting/startMatch
+ * back-to-back races the nonce and silently drops one tx, leaving the escrow
+ * stuck in the wrong state ("Match not in progress" on resolve).
+ */
+async function writeAndWait(
+  wallet: OrchestratorWallet,
+  params: Parameters<OrchestratorWallet["writeContract"]>[0],
+  label: string
+): Promise<boolean> {
+  try {
+    const hash = await wallet.writeContract(params);
+    const receipt = await getPublicClient().waitForTransactionReceipt({ hash, timeout: 60_000 });
+    if (receipt.status !== "success") {
+      console.error(`[chain] ${label} reverted (${hash})`);
+      return false;
+    }
+    console.log(`[chain] ${label} ✓ https://testnet.arcscan.app/tx/${hash}`);
+    return true;
+  } catch (e) {
+    console.error(`[chain] ${label} failed (continuing):`, e instanceof Error ? e.message : e);
+    return false;
+  }
+}
 
 const ROUND_DELAY_MS = 4000; // pause between rounds for UI drama
 const MAX_ROUNDS = 3;        // best of 3
@@ -22,8 +51,8 @@ const ORACLE_FEE = 0.0001; // charged when an agent receives round market data
 const ACTION_FEE = 0.0005; // charged when an agent's action is executed
 
 // Pot split (must mirror MatchEscrow.sol constants)
-const BETTOR_SHARE = 0.7;
-const AGENT_SHARE = 0.2;
+const BETTOR_SHARE = 0.6;
+const AGENT_SHARE = 0.3;
 
 export class MatchOrchestrator {
   async runMatch(matchId: string): Promise<void> {
@@ -31,7 +60,7 @@ export class MatchOrchestrator {
 
     const { data: match, error } = await db
       .from("matches")
-      .select("*, match_agents(agent_id, agents(wallet_address, registry_id))")
+      .select("*, match_agents(agent_id, agents(wallet_address, registry_id, model))")
       .eq("id", matchId)
       .single();
 
@@ -59,33 +88,25 @@ export class MatchOrchestrator {
       }
     }
 
-    // Close betting on-chain
+    // Close betting on-chain (wait for receipt before startMatch — nonce order matters)
     if (wallet && match.contract_match_id) {
-      try {
-        await wallet.writeContract({
-          address: MATCH_ESCROW_ADDRESS,
-          abi: MATCH_ESCROW_ABI,
-          functionName: "closeBetting",
-          args: [BigInt(match.contract_match_id)],
-        });
-      } catch (e) {
-        console.error("closeBetting failed (continuing):", e);
-      }
+      await writeAndWait(wallet, {
+        address: MATCH_ESCROW_ADDRESS,
+        abi: MATCH_ESCROW_ABI,
+        functionName: "closeBetting",
+        args: [BigInt(match.contract_match_id)],
+      }, `closeBetting(${match.contract_match_id})`);
     }
 
     await db.from("matches").update({ state: "BETTING_CLOSED" }).eq("id", matchId);
 
     if (wallet && match.contract_match_id) {
-      try {
-        await wallet.writeContract({
-          address: MATCH_ESCROW_ADDRESS,
-          abi: MATCH_ESCROW_ABI,
-          functionName: "startMatch",
-          args: [BigInt(match.contract_match_id)],
-        });
-      } catch (e) {
-        console.error("startMatch failed (continuing):", e);
-      }
+      await writeAndWait(wallet, {
+        address: MATCH_ESCROW_ADDRESS,
+        abi: MATCH_ESCROW_ABI,
+        functionName: "startMatch",
+        args: [BigInt(match.contract_match_id)],
+      }, `startMatch(${match.contract_match_id})`);
     }
 
     await db.from("matches").update({
@@ -111,7 +132,8 @@ export class MatchOrchestrator {
           }
 
           const prompt = engine.getAgentPrompt(agentId, round);
-          const action = await runAgentTurn(agentId, prompt, AGENT_SYSTEM_PROMPT);
+          const model = match.match_agents.find((ma: any) => ma.agent_id === agentId)?.agents?.model ?? null;
+          const action = await runAgentTurn(agentId, prompt, AGENT_SYSTEM_PROMPT, model);
           return { agentId, action };
         })
       );
@@ -176,16 +198,12 @@ export class MatchOrchestrator {
     const winnerRegistryId = winnerAgent?.agents?.registry_id ?? 0;
 
     if (onChain) {
-      try {
-        await wallet!.writeContract({
-          address: MATCH_ESCROW_ADDRESS,
-          abi: MATCH_ESCROW_ABI,
-          functionName: "resolveMatch",
-          args: [BigInt(contractMatchId!), BigInt(winnerRegistryId)],
-        });
-      } catch (e) {
-        console.error("resolveMatch contract call failed (continuing):", e);
-      }
+      await writeAndWait(wallet!, {
+        address: MATCH_ESCROW_ADDRESS,
+        abi: MATCH_ESCROW_ABI,
+        functionName: "resolveMatch",
+        args: [BigInt(contractMatchId!), BigInt(winnerRegistryId)],
+      }, `resolveMatch(${contractMatchId}, winner=${winnerRegistryId})`);
     }
 
     await db.from("matches").update({
@@ -224,23 +242,19 @@ export class MatchOrchestrator {
       }
     }
 
-    // Update AgentRegistry on-chain stats
+    // Update AgentRegistry on-chain stats (sequential — same nonce ordering rule)
     if (onChain) {
       for (const ma of matchAgents) {
         const regId = ma.agents?.registry_id;
         if (!regId) continue;
         const won = ma.agent_id === result.winnerId;
-        const earnings = won ? BigInt(Math.round((result.finalScores[ma.agent_id] ?? 0) * 1e6)) : 0n;
-        try {
-          await wallet!.writeContract({
-            address: AGENT_REGISTRY_ADDRESS,
-            abi: AGENT_REGISTRY_ABI,
-            functionName: "updateStats",
-            args: [BigInt(regId), won, earnings],
-          });
-        } catch (e) {
-          console.error("updateStats failed for", ma.agent_id, e);
-        }
+        const earnings = won ? BigInt(Math.round(Math.max(result.finalScores[ma.agent_id] ?? 0, 0) * 1e6)) : 0n;
+        await writeAndWait(wallet!, {
+          address: AGENT_REGISTRY_ADDRESS,
+          abi: AGENT_REGISTRY_ABI,
+          functionName: "updateStats",
+          args: [BigInt(regId), won, earnings],
+        }, `updateStats(agent=${regId}, won=${won})`);
       }
     }
   }

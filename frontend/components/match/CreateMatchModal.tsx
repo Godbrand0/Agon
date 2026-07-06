@@ -11,10 +11,11 @@ import { ALL_GAMES, isGameEnabled } from "@/lib/games-config";
 
 const GAME_TYPES: GameType[] = ALL_GAMES;
 
+// All engines run best-of-3 (see totalRounds in games/*/engine.ts)
 const GAME_META: Record<GameType, { rounds: number; desc: string }> = {
-  MARKET_MAKER:   { rounds: 10, desc: "Bid/ask spread competition on a synthetic asset with newsflow." },
-  LIQUIDITY_WARS: { rounds: 10, desc: "AMM liquidity provision — earn fees, minimize impermanent loss." },
-  DEBT_COLLECTOR: { rounds: 8,  desc: "Undercollateralized loan management under volatile market conditions." },
+  MARKET_MAKER:   { rounds: 3, desc: "Bid/ask spread competition on a synthetic asset with newsflow." },
+  LIQUIDITY_WARS: { rounds: 3, desc: "AMM liquidity provision — earn fees, minimize impermanent loss." },
+  DEBT_COLLECTOR: { rounds: 3, desc: "Undercollateralized loan management under volatile market conditions." },
 };
 
 interface AgentOption {

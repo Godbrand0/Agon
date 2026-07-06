@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { cn, gameTypeLabel, gameTypeBadgeColor, formatUSDC } from "@/lib/utils";
 import GameplayViewer from "@/components/match/GameplayViewer";
+import GameExplainer from "@/components/match/GameExplainer";
 import PreMatchPanel from "@/components/match/PreMatchPanel";
 import BetModal from "@/components/betting/BetModal";
 import ClaimCard from "@/components/betting/ClaimCard";
@@ -12,11 +13,12 @@ import NanoTicker from "@/components/economy/NanoTicker";
 import type { Match, Round } from "@/lib/database.types";
 import type { RoundResult } from "@/games/types";
 import { useWallet } from "@/lib/wallet";
+import { modelDisplayName } from "@/agents/runtime";
 
 interface AgentInMatch {
   agent_id: string;
   final_score: number | null;
-  agents: { id: string; name: string; wins: number; losses: number; registry_id: number | null };
+  agents: { id: string; name: string; wins: number; losses: number; registry_id: number | null; model: string | null };
 }
 
 interface MatchDetail extends Match {
@@ -27,11 +29,11 @@ interface MatchDetail extends Match {
 
 export default function MatchPage() {
   const { matchId } = useParams<{ matchId: string }>();
-  const { address, connect } = useWallet();
+  const { address, connect, WalletModal } = useWallet();
   const [match, setMatch] = useState<MatchDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [betModal, setBetModal] = useState<{ agentId: string; agentName: string } | null>(null);
-  const [userBet, setUserBet] = useState<{ agentId: string; amount: number; won: boolean | null; claimed: boolean | null; betId: string } | null>(null);
+  const [userBet, setUserBet] = useState<{ agentId: string; amount: number; won: boolean | null; claimed: boolean | null; betId: string; payout: number | null } | null>(null);
   const [now, setNow] = useState(Date.now());
 
   async function fetchMatch() {
@@ -47,7 +49,7 @@ export default function MatchPage() {
       const data = await res.json();
       if (data?.length > 0) {
         const b = data[0];
-        setUserBet({ agentId: b.agent_id, amount: b.amount, won: b.won, claimed: b.claimed, betId: b.id });
+        setUserBet({ agentId: b.agent_id, amount: b.amount, won: b.won, claimed: b.claimed, betId: b.id, payout: b.payout });
       }
     }
   }
@@ -61,9 +63,20 @@ export default function MatchPage() {
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "matches", filter: `id=eq.${matchId}` },
         () => fetchMatch())
       .subscribe();
-    const ticker = setInterval(() => setNow(Date.now()), 10_000);
-    return () => { supabase.removeChannel(channel); clearInterval(ticker); };
+    // Smooth per-second countdown (was 10s — felt laggy/jumpy)
+    const clock = setInterval(() => setNow(Date.now()), 1000);
+    return () => { supabase.removeChannel(channel); clearInterval(clock); };
   }, [matchId]);
+
+  // Fallback poll: Realtime can lag or silently drop its subscription (e.g.
+  // across a dev-server reload or a flaky websocket), which otherwise leaves
+  // the page frozen on stale state until something else forces a refetch.
+  // Poll while the match is still in play as a safety net alongside Realtime.
+  useEffect(() => {
+    if (match?.state === "RESOLVED" || match?.state === "CANCELLED") return;
+    const poll = setInterval(() => fetchMatch(), 4000);
+    return () => clearInterval(poll);
+  }, [matchId, match?.state]);
 
   useEffect(() => {
     if (address) fetchUserBet(address);
@@ -93,6 +106,7 @@ export default function MatchPage() {
     wins:       ma.agents?.wins ?? 0,
     losses:     ma.agents?.losses ?? 0,
     registryId: ma.agents?.registry_id ?? null,
+    model:      ma.agents?.model ?? null,
   }));
 
   const rounds: RoundResult[] = (match.rounds ?? []).map((r) => ({
@@ -104,11 +118,9 @@ export default function MatchPage() {
     roundDelta: (r.state as Record<string, unknown>)?.roundDelta as Record<string, number> | undefined,
   }));
 
-  // Payout estimate for claim: user's share of 70% of pot
-  const userAgentTotalBets = 1; // would come from betsByAgent, simplified here
-  const estimatedPayout = userBet && match.total_pot > 0
-    ? (userBet.amount / Math.max(userBet.amount, 1)) * (0.7 * match.total_pot)
-    : 0;
+  // The real payout, computed by settlePot() at resolution — not re-derived
+  // client-side (that would require knowing every other bettor's stake).
+  const estimatedPayout = userBet?.payout ?? 0;
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
@@ -164,7 +176,10 @@ export default function MatchPage() {
       {/* Main content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: gameplay or waiting state */}
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 space-y-4">
+          {/* What the agents are doing — expanded pre-match, collapsed once live */}
+          <GameExplainer gameType={match.game_type} defaultOpen={!showGameplay} />
+
           {showGameplay ? (
             <GameplayViewer
               agents={agents}
@@ -235,7 +250,9 @@ export default function MatchPage() {
                         <p className="text-sm font-medium text-foreground">
                           {agent.name} {isWinner && "🏆"}
                         </p>
-                        <p className="text-xs text-muted-foreground">{agent.wins}W {agent.losses}L</p>
+                        <p className="text-xs text-muted-foreground">
+                          {agent.wins}W {agent.losses}L · <span className="text-agon-green/80">{modelDisplayName(agent.model)}</span>
+                        </p>
                       </div>
                       <span className="font-data text-sm font-semibold text-muted-foreground">
                         {wr}{wr !== "—" ? "% WR" : ""}
@@ -257,6 +274,10 @@ export default function MatchPage() {
         <BetModal
           open={!!betModal}
           onClose={() => setBetModal(null)}
+          onPlaced={() => {
+            fetchMatch();
+            if (address) fetchUserBet(address);
+          }}
           matchId={match.id}
           matchLabel={`${gameTypeLabel(match.game_type)} · ${agents.map((a) => a.name).join(" vs ")}`}
           agentId={betModal.agentId}
@@ -268,6 +289,7 @@ export default function MatchPage() {
           userAddress={address ?? "0xDemoUser"}
         />
       )}
+      {WalletModal}
     </div>
   );
 }

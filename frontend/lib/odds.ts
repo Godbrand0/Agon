@@ -1,5 +1,5 @@
-/** 70% of the total pot goes to winning bettors */
-const BETTOR_SHARE = 0.7;
+/** 60% of the total pot goes to winning bettors */
+const BETTOR_SHARE = 0.6;
 
 export function calculateImpliedOdds(totalPot: number, totalBetsOnAgent: number): number {
   if (totalBetsOnAgent === 0) return 0;

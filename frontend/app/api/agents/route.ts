@@ -4,7 +4,18 @@ import { v4 as uuidv4 } from 'uuid';
 import { isGameEnabled, GAME_LOCKED_MESSAGE } from "@/lib/games-config";
 import { supabaseAdmin } from "@/lib/supabase";
 import { createAgentWallet } from "@/lib/circle";
+import { AGENT_MODEL_POOL } from "@/agents/runtime";
 import type { GameType } from "@/lib/database.types";
+
+/** Every agent competes on its own LLM — assign the least-used model in the pool. */
+async function pickModel(): Promise<string> {
+  const { data } = await supabase.from("agents").select("model").eq("active", true);
+  const counts = new Map<string, number>(AGENT_MODEL_POOL.map((m) => [m, 0]));
+  for (const row of data ?? []) {
+    if (row.model && counts.has(row.model)) counts.set(row.model, counts.get(row.model)! + 1);
+  }
+  return [...counts.entries()].sort((a, b) => a[1] - b[1])[0][0];
+}
 
 const supabase = supabaseAdmin();
 
@@ -15,7 +26,7 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from("agents")
-    .select("id, name, game_type, owner_address, wallet_address, registry_id, status, wins, losses, total_earnings, active, created_at")
+    .select("id, name, game_type, owner_address, wallet_address, registry_id, model, status, wins, losses, total_earnings, active, created_at")
     .eq("active", true)
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -57,6 +68,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Circle wallet creation failed: ${e}` }, { status: 502 });
   }
 
+  const model = await pickModel();
+
   const { data: agent, error } = await supabase
     .from("agents")
     .insert({
@@ -66,6 +79,7 @@ export async function POST(req: NextRequest) {
       owner_address: ownerAddress,
       wallet_address: wallet.address,
       circle_wallet_id: wallet.circleWalletId,
+      model,
       api_token,
       status: "OFFLINE",
       created_at: new Date().toISOString(),

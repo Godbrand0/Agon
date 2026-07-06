@@ -42,7 +42,7 @@ function agentName(bet: BetWithMatch): string {
 }
 
 export default function ProfilePage() {
-  const { address, isConnected, connect, isConnecting } = useWallet();
+  const { address, isConnected, connect, isConnecting, WalletModal } = useWallet();
   const [bets, setBets] = useState<BetWithMatch[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -121,7 +121,7 @@ export default function ProfilePage() {
           <div className="space-y-3">
             {unclaimed.map((bet) => {
               const totalPot = bet.matches.total_pot;
-              const estimatedPayout = totalPot > 0 ? bet.amount * 0.7 : 0; // simplified
+              const estimatedPayout = totalPot > 0 ? bet.amount * 0.6 : 0; // simplified
               return (
                 <div key={bet.id} className="space-y-2">
                   <div className="flex items-center gap-2 text-xs text-muted-foreground px-1">
@@ -260,6 +260,7 @@ export default function ProfilePage() {
           </Link>
         </div>
       )}
+      {WalletModal}
     </div>
   );
 }

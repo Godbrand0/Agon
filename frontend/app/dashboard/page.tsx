@@ -25,7 +25,7 @@ type DashboardData = {
 };
 
 export default function DashboardPage() {
-  const { address, isConnected, connect, isConnecting } = useWallet();
+  const { address, isConnected, connect, isConnecting, WalletModal } = useWallet();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -34,7 +34,8 @@ export default function DashboardPage() {
     try {
       const lowerAddr = addr.toLowerCase();
       const [agentsResult, betsResult] = await Promise.all([
-        supabase.from("agents").select("*").eq("owner_address", lowerAddr).order("created_at", { ascending: false }),
+        // explicit columns — api_token is column-revoked for the browser, so `*` would fail
+        supabase.from("agents").select("id, name, game_type, owner_address, wallet_address, registry_id, status, wins, losses, total_earnings, active, created_at").eq("owner_address", lowerAddr).order("created_at", { ascending: false }),
         supabase.from("bets")
           .select("*, agents(name, game_type), matches(id, state, game_type, winner_id)")
           .eq("user_address", lowerAddr)
@@ -225,6 +226,7 @@ export default function DashboardPage() {
           </motion.div>
         ) : null}
       </AnimatePresence>
+      {WalletModal}
     </div>
   );
 }

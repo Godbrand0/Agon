@@ -4,11 +4,83 @@ import { useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils";
 import type { RoundResult } from "@/games/types";
-import { Bot, Trophy, Zap, ChevronRight } from "lucide-react";
+import { Bot, Trophy, Zap, ChevronRight, Newspaper, TrendingUp, TrendingDown } from "lucide-react";
 
 interface Agent {
   id: string;
   name: string;
+}
+
+interface NewsInfo {
+  description: string;
+  type: "BULLISH" | "BEARISH" | "NEUTRAL" | "VOLATILE";
+  impactPct: number;
+}
+
+interface AgentBreakdown {
+  quote: { bid: number; ask: number } | null;
+  fills: number;
+  spreadIncome: number;
+  invChange: number;
+  inventoryBefore: number;
+  inventoryAfter: number;
+  pnlDelta: number;
+  invalid: boolean;
+}
+
+const NEWS_STYLE: Record<NewsInfo["type"], { color: string; bg: string }> = {
+  BULLISH:  { color: "text-agon-green", bg: "bg-agon-green/10 border-agon-green/30" },
+  BEARISH:  { color: "text-destructive", bg: "bg-destructive/10 border-destructive/30" },
+  VOLATILE: { color: "text-amber-400", bg: "bg-amber-400/10 border-amber-400/30" },
+  NEUTRAL:  { color: "text-muted-foreground", bg: "bg-surface-2 border-border" },
+};
+
+/** News headline + price move — the shared market event both agents reacted to. */
+function NewsBanner({ news, prevPrice, midPrice }: { news: NewsInfo; prevPrice: number; midPrice: number }) {
+  const style = NEWS_STYLE[news.type] ?? NEWS_STYLE.NEUTRAL;
+  const up = news.impactPct >= 0;
+  return (
+    <div className={cn("rounded-lg border px-3 py-2.5 flex items-center gap-3", style.bg)}>
+      <Newspaper className={cn("h-4 w-4 shrink-0", style.color)} />
+      <div className="flex-1 min-w-0">
+        <p className={cn("text-xs font-medium", style.color)}>{news.type}</p>
+        <p className="text-sm text-foreground truncate">&ldquo;{news.description}&rdquo;</p>
+      </div>
+      <div className="text-right shrink-0">
+        <div className="flex items-center gap-1 justify-end">
+          {up ? <TrendingUp className="h-3.5 w-3.5 text-agon-green" /> : <TrendingDown className="h-3.5 w-3.5 text-destructive" />}
+          <span className={cn("font-data font-bold text-sm", up ? "text-agon-green" : "text-destructive")}>
+            {up ? "+" : ""}{(news.impactPct * 100).toFixed(1)}%
+          </span>
+        </div>
+        <p className="font-data text-xs text-muted-foreground">
+          ${prevPrice.toFixed(2)} → <span className="text-foreground font-semibold">${midPrice.toFixed(2)}</span>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/** Where an agent's bid/ask sit relative to the new mid price. */
+function QuoteBar({ quote, midPrice, color }: { quote: { bid: number; ask: number }; midPrice: number; color: string }) {
+  const lo = Math.min(quote.bid, midPrice) * 0.995;
+  const hi = Math.max(quote.ask, midPrice) * 1.005;
+  const span = hi - lo || 1;
+  const pct = (v: number) => ((v - lo) / span) * 100;
+
+  return (
+    <div className="relative h-1.5 rounded-full bg-surface-2 mt-1.5 mb-0.5">
+      <div
+        className={cn("absolute h-1.5 rounded-full", color)}
+        style={{ left: `${pct(quote.bid)}%`, width: `${Math.max(pct(quote.ask) - pct(quote.bid), 2)}%` }}
+      />
+      <div
+        className="absolute -top-0.5 h-2.5 w-0.5 bg-foreground/70"
+        style={{ left: `${pct(midPrice)}%` }}
+        title={`Mid price $${midPrice.toFixed(2)}`}
+      />
+    </div>
+  );
 }
 
 interface Props {
@@ -65,6 +137,10 @@ function RoundCard({
   const reasoning = (round.state?.reasoning ?? {}) as Record<string, string>;
   const roundDelta = (round.roundDelta ?? {}) as Record<string, number>;
   const roundWinner = round.roundWinner ?? (round.state?.roundWinner as string | undefined);
+  const news = round.state?.news as NewsInfo | undefined;
+  const prevPrice = round.state?.prevPrice as number | undefined;
+  const midPrice = round.state?.midPrice as number | undefined;
+  const breakdown = (round.state?.breakdown ?? {}) as Record<string, AgentBreakdown>;
 
   return (
     <motion.div
@@ -109,13 +185,19 @@ function RoundCard({
           Waiting for previous round to finish…
         </div>
       ) : (
-        <div className="p-4 space-y-4">
-          {/* Agent reasoning blocks */}
+        <div className="p-4 space-y-3">
+          {/* News + price — the shared event both agents reacted to */}
+          {news && prevPrice !== undefined && midPrice !== undefined && (
+            <NewsBanner news={news} prevPrice={prevPrice} midPrice={midPrice} />
+          )}
+
+          {/* Per-agent decision + how it played out against that price move */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {agents.map((agent, i) => {
               const color = AGENT_COLORS[i];
               const agentReasoning = reasoning[agent.id];
               const delta = roundDelta[agent.id];
+              const b = breakdown[agent.id];
               const wonRound = roundWinner === agent.id;
 
               return (
@@ -132,6 +214,13 @@ function RoundCard({
                     {wonRound && <Trophy className="h-3.5 w-3.5 text-agon-green ml-auto" />}
                   </div>
 
+                  {/* Confirms this agent's prompt included the same shared news event above */}
+                  {news && (
+                    <p className="text-[10px] text-muted-foreground/70 flex items-center gap-1">
+                      <Newspaper className="h-2.5 w-2.5 shrink-0" /> Reacting to: &ldquo;{news.description}&rdquo;
+                    </p>
+                  )}
+
                   {/* Reasoning */}
                   {agentReasoning ? (
                     <motion.p
@@ -147,37 +236,51 @@ function RoundCard({
                     </p>
                   ) : null}
 
-                  {/* Score delta */}
+                  {/* Quote vs. where the price ended up */}
+                  {b?.quote && midPrice !== undefined && (
+                    <div>
+                      <div className="flex items-center justify-between font-data text-xs text-muted-foreground">
+                        <span>${b.quote.bid.toFixed(2)} bid</span>
+                        <span>${b.quote.ask.toFixed(2)} ask</span>
+                      </div>
+                      <QuoteBar quote={b.quote} midPrice={midPrice} color={color.badge} />
+                      <p className="text-[10px] text-muted-foreground/70 text-center">| = mid price</p>
+                    </div>
+                  )}
+
+                  {b?.invalid && (
+                    <p className="text-xs text-destructive">Invalid quote — sat out this round</p>
+                  )}
+
+                  {/* P&L breakdown: spread earned vs. mark-to-market from the news move */}
+                  {b && !b.invalid && (
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs font-data pt-1 border-t border-border/50">
+                      <span className="text-muted-foreground">Fills</span>
+                      <span className="text-foreground text-right">{b.fills}</span>
+                      <span className="text-muted-foreground">Spread income</span>
+                      <span className="text-agon-green text-right">+${b.spreadIncome.toFixed(2)}</span>
+                      <span className="text-muted-foreground">
+                        Inventory {b.inventoryAfter >= 0 ? "long" : "short"} {Math.abs(b.inventoryAfter)}
+                      </span>
+                      <span className={cn("text-right", b.invChange >= 0 ? "text-agon-green" : "text-destructive")}>
+                        {b.invChange >= 0 ? "+" : ""}${b.invChange.toFixed(2)} MTM
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Total P&L delta this round */}
                   {delta !== undefined && (
                     <div className={cn(
-                      "text-xs font-data font-bold",
+                      "text-xs font-data font-bold pt-1",
                       delta >= 0 ? "text-agon-green" : "text-destructive"
                     )}>
-                      {delta >= 0 ? "+" : ""}{delta.toFixed(2)} this round
+                      {delta >= 0 ? "+" : ""}${delta.toFixed(2)} this round
                     </div>
                   )}
                 </div>
               );
             })}
           </div>
-
-          {/* Events feed */}
-          {round.events.length > 0 && (
-            <div className="rounded-lg bg-background/60 border border-border p-3 space-y-1 font-data text-xs">
-              {round.events.map((ev, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.05 }}
-                  className="flex items-start gap-1.5 text-muted-foreground"
-                >
-                  <ChevronRight className="h-3 w-3 shrink-0 mt-0.5 text-muted-foreground/50" />
-                  {ev}
-                </motion.div>
-              ))}
-            </div>
-          )}
         </div>
       )}
     </motion.div>
@@ -208,37 +311,59 @@ export default function GameplayViewer({ agents, rounds, isLive, winnerId }: Pro
 
   return (
     <div className="space-y-4">
-      {/* Score header */}
+      {/* Score header — score sits BETWEEN the two agent blocks, not after them */}
       <div className="rounded-xl border border-border bg-surface px-4 py-3">
-        <div className="flex items-center justify-between">
-          {agents.map((agent, i) => {
-            const color = AGENT_COLORS[i];
+        <div className="flex items-center justify-between gap-3">
+          {agents[0] && (() => {
+            const agent = agents[0];
+            const color = AGENT_COLORS[0];
             const wins = roundWins[agent.id] ?? 0;
             const isWinner = winnerId === agent.id;
             return (
-              <div key={agent.id} className={cn("flex items-center gap-2", i === 1 && "flex-row-reverse")}>
-                <div className={cn("h-8 w-8 rounded-full flex items-center justify-center", color.badge)}>
+              <div className="flex items-center gap-2">
+                <div className={cn("h-8 w-8 rounded-full flex items-center justify-center shrink-0", color.badge)}>
                   <Bot className="h-4 w-4 text-white" />
                 </div>
-                <div className={cn(i === 1 && "text-right")}>
+                <div>
                   <p className={cn("text-sm font-semibold", isWinner ? "text-agon-green" : "text-foreground")}>
                     {agent.name} {isWinner && "🏆"}
                   </p>
-                  <div className={cn("flex gap-1 mt-0.5", i === 1 && "justify-end")}>
+                  <div className="flex gap-1 mt-0.5">
                     {[0, 1, 2].map((j) => <ScorePip key={j} filled={j < wins} />)}
                   </div>
                 </div>
               </div>
             );
-          })}
+          })()}
 
-          {/* Center */}
-          <div className="text-center">
+          <div className="text-center shrink-0">
             <p className="font-data font-black text-2xl text-foreground">
               {roundWins[agents[0]?.id] ?? 0} : {roundWins[agents[1]?.id] ?? 0}
             </p>
             <p className="text-xs text-muted-foreground">Best of 3</p>
           </div>
+
+          {agents[1] && (() => {
+            const agent = agents[1];
+            const color = AGENT_COLORS[1];
+            const wins = roundWins[agent.id] ?? 0;
+            const isWinner = winnerId === agent.id;
+            return (
+              <div className="flex items-center gap-2 flex-row-reverse">
+                <div className={cn("h-8 w-8 rounded-full flex items-center justify-center shrink-0", color.badge)}>
+                  <Bot className="h-4 w-4 text-white" />
+                </div>
+                <div className="text-right">
+                  <p className={cn("text-sm font-semibold", isWinner ? "text-agon-green" : "text-foreground")}>
+                    {agent.name} {isWinner && "🏆"}
+                  </p>
+                  <div className="flex gap-1 mt-0.5 justify-end">
+                    {[0, 1, 2].map((j) => <ScorePip key={j} filled={j < wins} />)}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
 

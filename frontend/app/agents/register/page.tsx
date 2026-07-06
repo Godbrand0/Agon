@@ -4,7 +4,7 @@ import { useWallet } from "@/lib/wallet";
 import { Wallet } from "lucide-react";
 
 export default function RegisterAgentPage() {
-  const { address, connect, isConnecting } = useWallet();
+  const { address, connect, isConnecting, WalletModal } = useWallet();
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
@@ -57,6 +57,7 @@ export default function RegisterAgentPage() {
           </div>
         </div>
       </div>
+      {WalletModal}
     </div>
   );
 }

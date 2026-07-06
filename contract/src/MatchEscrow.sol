@@ -11,8 +11,8 @@ contract MatchEscrow {
 
     enum MatchState { BETTING_OPEN, BETTING_CLOSED, PLAYING, RESOLVED, CANCELLED }
 
-    uint256 public constant BETTOR_SHARE   = 7000; // 70%
-    uint256 public constant AGENT_SHARE    = 2000; // 20%
+    uint256 public constant BETTOR_SHARE   = 6000; // 60%
+    uint256 public constant AGENT_SHARE    = 3000; // 30%
     uint256 public constant PLATFORM_SHARE = 1000; // 10%
     uint256 public constant MIN_BET        = 1e6;  // 1 USDC (6 decimals)
 
@@ -23,7 +23,7 @@ contract MatchEscrow {
         MatchState state;
         uint256 winnerAgentId;
         uint256 totalPot;
-        uint256 bettorPool;    // 70% held for claims
+        uint256 bettorPool;    // 60% held for claims
         uint256 bettingDeadline;
         address[] bettors;
     }
@@ -43,6 +43,7 @@ contract MatchEscrow {
     event WinningsClaimed(uint256 indexed matchId, address indexed bettor, uint256 amount);
     event PayoutSent(uint256 indexed matchId, address indexed recipient, uint256 amount);
     event MatchCancelled(uint256 indexed matchId);
+    event EmergencyWithdraw(address indexed to, uint256 amount);
 
     modifier onlyOrchestrator() {
         require(msg.sender == orchestrator, "Not orchestrator");
@@ -63,6 +64,23 @@ contract MatchEscrow {
 
     function setOrchestrator(address _orchestrator) external onlyContractOwner {
         orchestrator = _orchestrator;
+    }
+
+    /**
+     * TESTNET SAFETY VALVE — NOT a production pattern.
+     *
+     * Withdraws the contract's ENTIRE USDC balance to the owner, including
+     * any unclaimed bettor pool (the 60% share bettors haven't called
+     * claimWinnings() for yet). This makes the contract's fund custody
+     * admin-controlled, not trustless — a malicious or compromised owner
+     * key can drain winnings before bettors claim them. Only exists here to
+     * recover stuck testnet USDC; a production escrow would not expose this.
+     */
+    function withdrawAll() external onlyContractOwner {
+        uint256 balance = USDC.balanceOf(address(this));
+        require(balance > 0, "Nothing to withdraw");
+        USDC.transfer(contractOwner, balance);
+        emit EmergencyWithdraw(contractOwner, balance);
     }
 
     function createMatch(
@@ -120,8 +138,8 @@ contract MatchEscrow {
     }
 
     /**
-     * Resolve a match. Immediately pays the winning agent (20%) and platform (10%).
-     * The bettor share (70%) stays in the contract for individual claims.
+     * Resolve a match. Immediately pays the winning agent (30%) and platform (10%).
+     * The bettor share (60%) stays in the contract for individual claims.
      */
     function resolveMatch(uint256 matchId, uint256 winnerAgentId) external onlyOrchestrator {
         MatchData storage m = matchData[matchId];

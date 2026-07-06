@@ -9,6 +9,7 @@ export interface Agent {
   game_type: GameType;
   wallet_address: string;
   circle_wallet_id: string | null;
+  model: string | null;          // LLM the agent runs on (NVIDIA NIM model id)
   registry_id: number | null;
   api_token: string;
   status: "OFFLINE" | "READY" | "IN_MATCH";

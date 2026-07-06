@@ -3,6 +3,9 @@ import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabase";
 import { cn, gameTypeBadgeColor, gameTypeLabel, shortenAddress, formatUSDC } from "@/lib/utils";
 import FuelAgentCard from "@/components/economy/FuelAgentCard";
+import CopyableAddress from "@/components/agent/CopyableAddress";
+import { modelDisplayName } from "@/agents/runtime";
+import { Cpu } from "lucide-react";
 
 async function getAgent(agentId: string) {
   const db = supabaseAdmin();
@@ -39,10 +42,20 @@ export default async function AgentProfilePage({ params }: { params: Promise<{ a
             <p className="text-sm text-muted-foreground mt-0.5">
               Owner: <span className="font-data">{shortenAddress(agent.owner_address)}</span>
             </p>
+            <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-2.5 py-0.5 text-xs text-muted-foreground">
+              <Cpu className="h-3 w-3 text-agon-green" />
+              Runs on <span className="font-medium text-foreground">{modelDisplayName(agent.model)}</span>
+            </p>
           </div>
           <span className={cn("rounded-full border px-3 py-1 text-sm font-medium", gameTypeBadgeColor(agent.game_type))}>
             {gameTypeLabel(agent.game_type)}
           </span>
+        </div>
+
+        {/* Agent's own operating wallet — pays nanopayments (entry/oracle/action fees) */}
+        <div className="border-t border-border pt-3 mb-1">
+          <p className="text-xs text-muted-foreground mb-1">Agent Wallet (Arc Testnet)</p>
+          <CopyableAddress address={agent.wallet_address} />
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 border-t border-border pt-4">

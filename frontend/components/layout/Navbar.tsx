@@ -16,7 +16,7 @@ const NAV = [
 
 export default function Navbar() {
   const pathname = usePathname();
-  const { address, isConnected, isConnecting, connect, disconnect } = useWallet();
+  const { address, isConnected, isConnecting, connect, disconnect, WalletModal } = useWallet();
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/75 backdrop-blur-xl">
@@ -93,6 +93,7 @@ export default function Navbar() {
           )}
         </div>
       </div>
+      {WalletModal}
     </header>
   );
 }

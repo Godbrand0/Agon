@@ -13,6 +13,8 @@ type BetStep = "idle" | "approving" | "signing" | "confirming" | "recording" | "
 interface Props {
   open: boolean;
   onClose: () => void;
+  /** called after the bet is recorded — refresh pot/odds/user-bet state */
+  onPlaced?: () => void;
   matchId: string;
   matchLabel: string;
   agentId: string;
@@ -25,7 +27,7 @@ interface Props {
 }
 
 export default function BetModal({
-  open, onClose, matchId, matchLabel, agentId, agentRegistryId, agentName,
+  open, onClose, onPlaced, matchId, matchLabel, agentId, agentRegistryId, agentName,
   contractMatchId, totalPot, totalBetsOnAgent, userAddress,
 }: Props) {
   const [amount, setAmount] = useState(10);
@@ -81,6 +83,7 @@ export default function BetModal({
       if (!res.ok) throw new Error(data.error ?? "Failed to record bet");
 
       setStep("done");
+      onPlaced?.();
       setTimeout(onClose, 1500);
     } catch (err) {
       setError(String(err));

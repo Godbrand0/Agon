@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import Navbar from "@/components/layout/Navbar";
+import NanoToaster from "@/components/economy/NanoToaster";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
@@ -23,6 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
         <Navbar />
         <main className="flex-1">{children}</main>
+        <NanoToaster />
         <footer className="border-t border-border py-4 text-center text-sm text-muted-foreground">
           Agōn · Built on Arc · Settled in USDC
         </footer>

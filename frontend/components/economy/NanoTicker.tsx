@@ -77,6 +77,20 @@ export default function NanoTicker({ matchId, className }: Props) {
           setRows((prev) => [row, ...prev].slice(0, MAX_ROWS));
         }
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "nanopayments",
+          ...(matchId ? { filter: `match_id=eq.${matchId}` } : {}),
+        },
+        // tx_hash resolves from `circle:<id>` to the real on-chain hash
+        (payload) => {
+          const row = payload.new as Nanopayment;
+          setRows((prev) => prev.map((r) => (r.id === row.id ? row : r)));
+        }
+      )
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -135,6 +149,13 @@ export default function NanoTicker({ matchId, className }: Props) {
                     >
                       tx↗
                     </a>
+                  ) : n.tx_hash?.startsWith("circle:") ? (
+                    <span
+                      className="font-data text-agon-green/60 shrink-0 animate-pulse"
+                      title="Real Circle transfer — waiting for the on-chain hash"
+                    >
+                      settling…
+                    </span>
                   ) : (
                     <span
                       className="font-data text-muted-foreground/60 shrink-0"

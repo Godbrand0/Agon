@@ -1,5 +1,5 @@
 import type { IGameEngine, GameType, AgentAction, RoundResult, MatchResult } from "../types";
-import { buildMMPrompt, NEWS_EVENTS } from "./prompts";
+import { buildMMPrompt, NEWS_EVENTS, type NewsEvent } from "./prompts";
 
 interface MMState {
   midPrice: number;
@@ -27,6 +27,10 @@ export class MarketMakerEngine implements IGameEngine {
   private pendingActions: Record<string, MMAction> = {};
   private pendingReasonings: Record<string, string> = {};
   private roundWins: Record<string, number> = {};
+  // Sampled once per round: BOTH agents read the SAME event, and it is the
+  // event that actually moves the price — reading the news correctly is the
+  // skill being tested, so it must be predictive, not decorative.
+  private upcomingNews: NewsEvent | null = null;
 
   initialize(agentIds: string[]): void {
     this.agentIds = agentIds;
@@ -42,8 +46,10 @@ export class MarketMakerEngine implements IGameEngine {
   }
 
   getAgentPrompt(agentId: string, round: number): string {
-    const newsEvent = NEWS_EVENTS[Math.floor(Math.random() * NEWS_EVENTS.length)];
-    return buildMMPrompt({ ...this.state, round }, agentId, newsEvent);
+    if (!this.upcomingNews) {
+      this.upcomingNews = NEWS_EVENTS[Math.floor(Math.random() * NEWS_EVENTS.length)];
+    }
+    return buildMMPrompt({ ...this.state, round }, agentId, this.upcomingNews);
   }
 
   processAgentAction(agentId: string, action: AgentAction): void {
@@ -61,40 +67,68 @@ export class MarketMakerEngine implements IGameEngine {
     const events: string[] = [];
     const prevPnL = { ...this.state.agentPnL };
 
-    // News event drives price
-    const news = NEWS_EVENTS[Math.floor(Math.random() * NEWS_EVENTS.length)];
+    // The news both agents were shown is the news that moves the price
+    const news = this.upcomingNews ?? NEWS_EVENTS[Math.floor(Math.random() * NEWS_EVENTS.length)];
+    this.upcomingNews = null;
     const prevPrice = this.state.midPrice;
     this.state.midPrice *= 1 + news.priceImpact;
     events.push(`📰 "${news.description}" → price ${news.priceImpact >= 0 ? "+" : ""}${(news.priceImpact * 100).toFixed(1)}% to $${this.state.midPrice.toFixed(2)}`);
 
+    // Per-agent structured breakdown for the UI (spread income vs. news-driven
+    // mark-to-market, not just a flattened P&L number).
+    const agentBreakdown: Record<string, {
+      quote: { bid: number; ask: number } | null;
+      fills: number;
+      spreadIncome: number;
+      invChange: number;
+      inventoryBefore: number;
+      inventoryAfter: number;
+      pnlDelta: number;
+      invalid: boolean;
+    }> = {};
+
     for (const agentId of this.agentIds) {
       const q = this.pendingActions[agentId];
-      if (!q) continue;
+      const inventoryBefore = this.state.agentInventory[agentId];
 
-      const spread = q.ask - q.bid;
-      const midP = this.state.midPrice;
-
-      if (q.bid >= q.ask || q.bid <= 0) {
-        events.push(`⚠ Agent invalid quote — skipped`);
+      if (!q || q.bid >= q.ask || q.bid <= 0) {
+        events.push(`⚠ ${agentId} — invalid or missing quote, skipped`);
+        agentBreakdown[agentId] = {
+          quote: null, fills: 0, spreadIncome: 0, invChange: 0,
+          inventoryBefore, inventoryAfter: inventoryBefore, pnlDelta: 0, invalid: true,
+        };
         continue;
       }
 
+      const spread = q.ask - q.bid;
+      const midP = this.state.midPrice;
       const spreadPct = spread / midP;
       const maxFills = Math.max(1, Math.round(20 * (1 - Math.min(spreadPct / 0.05, 1))));
       const buyFills = Math.floor(Math.random() * maxFills);
       const sellFills = Math.floor(Math.random() * maxFills);
 
-      const inv = this.state.agentInventory[agentId];
-      const actualSell = Math.min(buyFills, inv + q.maxInventory);
-      const actualBuy = Math.min(sellFills, q.maxInventory - inv);
+      const actualSell = Math.min(buyFills, inventoryBefore + q.maxInventory);
+      const actualBuy = Math.min(sellFills, q.maxInventory - inventoryBefore);
 
       const spreadIncome = (actualSell + actualBuy) * (spread / 2);
       this.state.agentInventory[agentId] += actualBuy - actualSell;
-      const invChange = (this.state.midPrice - prevPrice) * this.state.agentInventory[agentId];
+      const inventoryAfter = this.state.agentInventory[agentId];
+      const invChange = (this.state.midPrice - prevPrice) * inventoryAfter;
 
       const roundPnL = spreadIncome + invChange;
       this.state.agentPnL[agentId] += roundPnL;
       this.state.agentQuotes[agentId] = { bid: q.bid, ask: q.ask };
+
+      agentBreakdown[agentId] = {
+        quote: { bid: q.bid, ask: q.ask },
+        fills: actualBuy + actualSell,
+        spreadIncome,
+        invChange,
+        inventoryBefore,
+        inventoryAfter,
+        pnlDelta: roundPnL,
+        invalid: false,
+      };
 
       events.push(
         `Quote $${q.bid.toFixed(2)}/$${q.ask.toFixed(2)} · ${actualBuy + actualSell} fills · P&L: ${roundPnL >= 0 ? "+" : ""}$${roundPnL.toFixed(2)}`
@@ -118,9 +152,12 @@ export class MarketMakerEngine implements IGameEngine {
       roundDelta,
       state: {
         midPrice: this.state.midPrice,
+        prevPrice,
+        news: { description: news.description, type: news.type, impactPct: news.priceImpact },
         inventory: { ...this.state.agentInventory },
         quotes: { ...this.state.agentQuotes },
         reasoning: { ...this.pendingReasonings },
+        breakdown: agentBreakdown,
         roundWinner,
         roundDelta,
       },

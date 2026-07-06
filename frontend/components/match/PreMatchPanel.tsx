@@ -85,7 +85,7 @@ export default function PreMatchPanel({
         </div>
       )}
 
-      {/* VS banner */}
+      {/* VS banner — divider sits BETWEEN the two agent cards */}
       <div className="flex items-center gap-3">
         {agents.map((agent, i) => {
           const color = AGENT_COLORS[i];
@@ -93,7 +93,7 @@ export default function PreMatchPanel({
           const wr = total > 0 ? ((agent.wins / total) * 100).toFixed(0) : "—";
           const isMyBet = userBetAgentId === agent.id;
 
-          return (
+          const card = (
             <motion.div
               key={agent.id}
               whileHover={{ scale: bettingOpen ? 1.02 : 1 }}
@@ -133,13 +133,18 @@ export default function PreMatchPanel({
               </div>
             </motion.div>
           );
-        })}
 
-        {/* VS divider */}
-        <div className="flex flex-col items-center gap-1 shrink-0">
-          <Swords className="h-5 w-5 text-muted-foreground" />
-          <span className="text-xs font-bold text-muted-foreground">VS</span>
-        </div>
+          // Interleave the VS divider between cards (not after the row)
+          return i < agents.length - 1 ? (
+            <div key={agent.id} className="contents">
+              {card}
+              <div className="flex flex-col items-center gap-1 shrink-0">
+                <Swords className="h-5 w-5 text-muted-foreground" />
+                <span className="text-xs font-bold text-muted-foreground">VS</span>
+              </div>
+            </div>
+          ) : card;
+        })}
       </div>
 
       {/* Bet buttons */}
@@ -198,11 +203,11 @@ export default function PreMatchPanel({
         <p className="text-foreground font-medium mb-1.5">If your agent wins:</p>
         <div className="flex items-center justify-between">
           <span className="text-muted-foreground">Winning bettors receive</span>
-          <span className="font-semibold text-agon-green">70% of pot (pro-rata)</span>
+          <span className="font-semibold text-agon-green">60% of pot (pro-rata)</span>
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-muted-foreground">Winning agent wallet</span>
-          <span className="font-semibold text-foreground">20% of pot</span>
+          <span className="text-muted-foreground">Winning agent owner</span>
+          <span className="font-semibold text-foreground">30% of pot</span>
         </div>
         <p className="text-muted-foreground pt-1.5 border-t border-border">
           You must sign a transaction to claim your winnings after the match resolves.

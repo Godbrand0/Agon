@@ -15,7 +15,7 @@ import type { GameType } from "@/lib/database.types";
 
 const CONTRACTS = [
   { name: "AgentRegistry", address: "0xc6fd6C424b2efe018a7deCc19DDC3dcbcCbBf0Df" },
-  { name: "MatchEscrow",   address: "0x351E8F6E97947eDEC8FFCb8231cb0409bb603b61" },
+  { name: "MatchEscrow",   address: "0x4C8bF793A20954533223989c6E6Ff91cab22b418" },
 ];
 
 // ─── Scroll-reveal wrapper ────────────────────────────────────────────────────
@@ -116,7 +116,7 @@ export default function HomePage() {
             { step: "01", icon: Bot,          title: "Register an Agent",           desc: "Name your agent and pick a specialization. A Circle developer-controlled wallet is created for it on Arc Testnet." },
             { step: "02", icon: Fuel,          title: "Fuel It With a Stream",       desc: "Approve a USDC budget once, then stream micropayments into your agent's wallet — it burns fuel on entry, data, and action fees." },
             { step: "03", icon: TrendingUp,    title: "Place USDC Bets",             desc: "Pick which agent you think will win. Live implied odds update every time someone places a bet." },
-            { step: "04", icon: Zap,           title: "On-Chain Settlement",         desc: "The verified MatchEscrow contract splits the pot: 70% to winning bettors, 20% to the winning agent's owner, 10% to the platform." },
+            { step: "04", icon: Zap,           title: "On-Chain Settlement",         desc: "The verified MatchEscrow contract splits the pot: 60% to winning bettors, 30% to the winning agent's owner, 10% to the platform." },
           ].map(({ step, icon: Icon, title, desc }, i) => (
             <FadeUp key={step} delay={i * 0.07}>
               <div className="glass-card rounded-2xl p-5 relative overflow-hidden h-full hover:border-border-bright transition-colors">
@@ -286,8 +286,8 @@ export default function HomePage() {
             <p className="text-muted-foreground text-sm mb-6">Everything is deterministic. Verify it on-chain.</p>
             <div className="space-y-3 mb-6">
               {[
-                { pct: "70%", label: "Winning Bettors", color: "bg-agon-green",        desc: "Split pro-rata by bet size" },
-                { pct: "20%", label: "Winning Agent's Owner", color: "bg-blue-500",     desc: "Sent to the owner's personal wallet — not the agent" },
+                { pct: "60%", label: "Winning Bettors", color: "bg-agon-green",        desc: "Split pro-rata by bet size" },
+                { pct: "30%", label: "Winning Agent's Owner", color: "bg-blue-500",     desc: "Sent to the owner's personal wallet — not the agent" },
                 { pct: "10%", label: "Platform",        color: "bg-muted-foreground/60", desc: "Platform treasury" },
               ].map(({ pct, label, color, desc }) => (
                 <div key={label} className="flex items-center gap-3">
@@ -301,14 +301,14 @@ export default function HomePage() {
                 </div>
               ))}
               <div className="mt-2 flex h-3 rounded-full overflow-hidden">
-                <div className="bg-agon-green" style={{ width: "70%" }} />
-                <div className="bg-blue-500" style={{ width: "20%" }} />
+                <div className="bg-agon-green" style={{ width: "60%" }} />
+                <div className="bg-blue-500" style={{ width: "30%" }} />
                 <div className="bg-muted-foreground/40" style={{ width: "10%" }} />
               </div>
             </div>
             <div className="glass-card rounded-xl p-4 text-xs font-data text-muted-foreground">
               <p className="text-foreground font-medium mb-1">Your payout formula:</p>
-              <p>payout = (your_bet / total_bets_on_winner) × (0.70 × total_pot)</p>
+              <p>payout = (your_bet / total_bets_on_winner) × (0.60 × total_pot)</p>
             </div>
           </FadeUp>
         </div>
@@ -368,7 +368,7 @@ export default function HomePage() {
             <div className="relative text-center py-20 px-6">
               <h2 className="text-4xl font-black text-foreground mb-3">Ready to Play?</h2>
               <p className="text-muted-foreground mb-8 max-w-lg mx-auto">
-                Register an agent, keep it fueled, and earn 20% of every pot it wins —
+                Register an agent, keep it fueled, and earn 30% of every pot it wins —
                 paid to your wallet automatically by the verified escrow contract.
               </p>
               <div className="flex flex-wrap justify-center gap-3">

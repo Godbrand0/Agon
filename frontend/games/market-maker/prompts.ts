@@ -28,7 +28,7 @@ export function buildMMPrompt(state: MMStateForPrompt, agentId: string, newsEven
   return `
 You are a market maker agent competing in a live trading match.
 
-CURRENT MARKET STATE (Round ${state.round}/10):
+CURRENT MARKET STATE (Round ${state.round}/3 · best of 3):
 - Asset mid price: $${state.midPrice.toFixed(4)}
 - Your inventory: ${state.agentInventory[agentId] ?? 0} units
 - Your P&L so far: $${(state.agentPnL[agentId] ?? 0).toFixed(4)} USDC
@@ -48,8 +48,9 @@ Respond ONLY with a valid JSON object:
 {
   "bid": <number>,
   "ask": <number>,
-  "maxInventory": <integer 1-100>
+  "maxInventory": <integer 1-100>,
+  "reasoning": "<one sentence citing the news event above and how it shaped your quote>"
 }
-No explanation. No preamble. JSON only.
+No explanation outside the JSON. No preamble. JSON only.
   `.trim();
 }

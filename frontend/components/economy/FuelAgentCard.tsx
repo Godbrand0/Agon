@@ -42,7 +42,7 @@ interface Props {
 }
 
 export default function FuelAgentCard({ agentId, agentName, agentWallet }: Props) {
-  const { address, isConnected, connect } = useWallet();
+  const { address, isConnected, connect, WalletModal } = useWallet();
   const [spender, setSpender] = useState<string | null>(null);
   const [chainReady, setChainReady] = useState(false);
   const [stream, setStream] = useState<Stream | null>(null);
@@ -256,6 +256,7 @@ export default function FuelAgentCard({ agentId, agentName, agentWallet }: Props
           </div>
         )}
       </div>
+      {WalletModal}
     </div>
   );
 }

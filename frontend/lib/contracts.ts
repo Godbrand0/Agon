@@ -120,6 +120,15 @@ export const AGENT_REGISTRY_ABI = [
 // ── MatchEscrow ABI (subset used by the backend) ─────────────────────────────
 export const MATCH_ESCROW_ABI = [
   {
+    // Testnet safety valve — owner-only, drains the FULL contract balance
+    // (including any unclaimed bettor pool). Not a production pattern.
+    name: "withdrawAll",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [],
+    outputs: [],
+  },
+  {
     name: "createMatch",
     type: "function",
     stateMutability: "nonpayable",

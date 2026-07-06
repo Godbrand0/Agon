@@ -24,7 +24,7 @@ Traditional payment rails make micropayments structurally impossible — at $2, 
 1. **Real M2M nanopayments, not a mock.** Every fee an agent pays is a USDC transfer from its Circle developer-controlled wallet to the protocol wallet, recorded in a live ledger with explorer-visible tx hashes.
 2. **Fuel streaming (approve-and-pull).** Owners sign *one* USDC approval, then the platform pulls micro-amounts (e.g. $0.01 every 5s) into the agent's wallet — a live drip of on-chain transfers you can watch on ArcScan. High-frequency settlement made visceral.
 3. **Watchable AI competition.** Two LLM agents post bid/ask spreads against synthetic order flow with news events, inventory risk, and mark-to-market P&L. Live round feed, live odds, live fee ticker.
-4. **Deterministic, on-chain payouts.** The pot splits 70/20/10 (bettors / winning agent's owner / platform) in a verified escrow contract. Anyone can audit the constants.
+4. **Deterministic, on-chain payouts.** The pot splits 60/30/10 (bettors / winning agent's owner / platform) in a verified escrow contract. Anyone can audit the constants.
 5. **Graceful degradation everywhere.** Every chain and Circle integration falls back to simulated settlement (`sim_` hashes) when unconfigured — the product demos end-to-end with just Supabase and an LLM key, and upgrades to fully real settlement as credentials are added.
 
 ---
@@ -61,8 +61,8 @@ Agent nanopayments (agent Circle wallet → protocol wallet)
   └── $0.0005  per action execution   (per agent, per round)
 
 Pot (all bets, held in MatchEscrow)
-  ├── 70% → winning bettors, pro-rata by bet size
-  ├── 20% → winning agent's OWNER wallet (not the agent)
+  ├── 60% → winning bettors, pro-rata by bet size
+  ├── 30% → winning agent's OWNER wallet (not the agent)
   └── 10% → platform treasury
 
 Fuel streams (owner wallet → agent wallet)
@@ -76,7 +76,7 @@ Fuel streams (owner wallet → agent wallet)
 | Contract | Address | Status |
 |---|---|---|
 | **AgentRegistry** | [`0xc6fd6C424b2efe018a7deCc19DDC3dcbcCbBf0Df`](https://testnet.arcscan.app/address/0xc6fd6c424b2efe018a7decc19ddc3dcbccbbf0df) | ✅ Verified |
-| **MatchEscrow** | [`0x351E8F6E97947eDEC8FFCb8231cb0409bb603b61`](https://testnet.arcscan.app/address/0x351e8f6e97947edec8ffcb8231cb0409bb603b61) | ✅ Verified |
+| **MatchEscrow** | [`0x4C8bF793A20954533223989c6E6Ff91cab22b418`](https://testnet.arcscan.app/address/0x4c8bf793a20954533223989c6e6ff91cab22b418) | ✅ Verified |
 | USDC (Arc native, ERC-20 view) | `0x3600000000000000000000000000000000000000` | Canonical |
 
 On-chain agents: **Alpha** (registry ID 1, [registration tx](https://testnet.arcscan.app/tx/0x7964cdf66a3eccc7f33e2841f61e6346b0e91ddca751112d22c024f418ff2834)) · **Beta** (registry ID 2, [registration tx](https://testnet.arcscan.app/tx/0x15dd7efb5de48022445cbc7fe674602d54c8dc65c6e928d7f8f3446b9975a0b2))
@@ -90,7 +90,7 @@ Agents are headless, so their operating wallets are **dev-controlled**: the serv
 
 ### Arc — the settlement layer
 - **Native USDC gas**: contracts, bets, and streams all settle in the same asset agents earn and spend. The ERC-20 view (`0x3600…0000`, 6 decimals) and native gas view (18 decimals) are never mixed.
-- **MatchEscrow** holds bets, enforces the 70/20/10 split, and gates all state transitions behind an orchestrator address.
+- **MatchEscrow** holds bets, enforces the 60/30/10 split, and gates all state transitions behind an orchestrator address.
 - **AgentRegistry** stores agent identity and win/loss/earnings stats on-chain.
 - **Fuel streams** are plain `transferFrom` pulls on Arc's native USDC — one approval, then per-tick transfers visible on [ArcScan](https://testnet.arcscan.app).
 - RPC: `https://rpc.testnet.arc.network` · Faucet: [faucet.circle.com](https://faucet.circle.com)
@@ -99,7 +99,7 @@ Agents are headless, so their operating wallets are **dev-controlled**: the serv
 
 ## The end-to-end test run (verified)
 
-The full loop was exercised in a single scripted run (`scripts/run-test-match.ts`) — Alpha vs Beta, Market Maker Duel, best-of-3:
+The full loop was exercised in a single scripted run (`scripts/run-test-match.ts`) — Alpha vs Beta, Market Maker Duel, best-of-3. *(Run under the original 70/20/10 split, since revised to 60/30/10 — the loop itself is unchanged.)*
 
 ```
 ⚔️  Alpha vs Beta                      ✅ Match completed in 63.2s
@@ -212,7 +212,7 @@ pnpm dev   # → http://localhost:3000
 | Pot rake | 10% of every pot | betting volume |
 | Fuel stream margin (future) | bps on streamed volume | agent operating spend |
 
-**Participant economics:** bettors compete for 70% of the pot at pro-rata odds (`payout = your_bet / total_on_winner × 0.70 × pot`); agent owners earn 20% of every pot their agent wins against ~$0.50 of operating cost per match — a profitable agent is one whose win rate covers its burn. This creates the core loop: owners fund agents → agents compete → spectators bet → winners get paid → stats drive the next round of betting.
+**Participant economics:** bettors compete for 60% of the pot at pro-rata odds (`payout = your_bet / total_on_winner × 0.60 × pot`); agent owners earn 30% of every pot their agent wins against ~$0.50 of operating cost per match — a profitable agent is one whose win rate covers its burn. This creates the core loop: owners fund agents → agents compete → spectators bet → winners get paid → stats drive the next round of betting.
 
 **Unit economics of the M2M layer:** a single match produces ~9–15 settlement events worth ~$1.00–1.01. At traditional rails' ~$0.30 + 2.9% per event this activity is impossible; on Arc the marginal settlement cost is effectively zero, so *metering can be priced at the value of the data/action, not the cost of the rail*.
 
@@ -223,7 +223,7 @@ pnpm dev   # → http://localhost:3000
 - **Unlock the remaining arenas** — Liquidity Wars and Debt Collector engines are already implemented and locked behind a one-line config change.
 - **Signed-authorization nanopayment batching** — move per-fee settlement to Arc's offchain-authorization / bulk-settlement pattern for higher frequency at lower cost.
 - **Bring-your-own-agent API** — external agents already have an auth token + paid oracle endpoint (`POST /api/oracle`, HTTP 402 on failed payment) and WebSocket-ready runners (`demo-agents/`); productize registration → matchmaking for third-party agents.
-- **Fuel stream marketplace** — let *anyone* (not just the owner) sponsor an agent's operating costs in exchange for a share of its 20% winnings.
+- **Fuel stream marketplace** — let *anyone* (not just the owner) sponsor an agent's operating costs in exchange for a share of its 30% winnings.
 - **ERC-8004 agent reputation** — export win/loss/earnings as portable on-chain agent reputation.
 - **Tournaments & leagues** — scheduled brackets with rolling pots and season leaderboards.
 
