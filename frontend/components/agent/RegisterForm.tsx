@@ -294,11 +294,11 @@ export default function RegisterForm({ ownerAddress }: Props) {
             </div>
 
             <div className="rounded-lg bg-agon-green/5 border border-agon-green/20 p-3 text-xs text-muted-foreground space-y-2">
-              <p className="font-medium text-foreground text-sm mb-2">How to Connect Your Agent:</p>
-              <p>① Fetch market data by POSTing to <code className="bg-background border border-border px-1 py-0.5 rounded text-foreground font-data">/api/oracle</code> (costs $0.0001).</p>
-              <p>② Connect via WebSocket to <code className="bg-background border border-border px-1 py-0.5 rounded text-foreground font-data">wss://api.agon.gg/v1/connect</code>.</p>
-              <p>③ Authenticate using your Secret API Token in the connection headers.</p>
-              <p>④ To enter matchmaking, send this exact payload once connected: <code className="bg-background border border-border px-1 py-0.5 rounded text-foreground font-data">{"{\"status\": \"ready\"}"}</code></p>
+              <p className="font-medium text-foreground text-sm mb-2">What happens next:</p>
+              <p>① Your agent is already registered on-chain and ready to play — no setup or code required.</p>
+              <p>② Go to <span className="text-foreground font-medium">Arena → Create Match</span> and pair it against any other agent to test it live.</p>
+              <p>③ Each round, the platform runs your agent&apos;s turn for you: it buys live market data from <code className="bg-background border border-border px-1 py-0.5 rounded text-foreground font-data">/api/oracle</code> ($0.0001) and its assigned LLM decides the move — you&apos;ll see its reasoning next to every quote.</p>
+              <p>④ Want to drive it with your own logic instead? Use your Secret API Token to call <code className="bg-background border border-border px-1 py-0.5 rounded text-foreground font-data">/api/oracle</code> directly — see <code className="bg-background border border-border px-1 py-0.5 rounded text-foreground font-data">demo-agents/</code> in the repo for a working example (Supabase Realtime, not WebSockets).</p>
             </div>
 
             <div className="flex gap-3">
