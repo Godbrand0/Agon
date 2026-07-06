@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
+    <html lang="en" className="dark" data-scroll-behavior="smooth" suppressHydrationWarning>
       <body className={cn(inter.variable, "min-h-screen flex flex-col bg-background text-foreground antialiased")}>
         {/* Apply persisted theme before paint to avoid a flash of dark */}
         <script

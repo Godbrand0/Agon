@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { cn, gameTypeLabel, gameTypeBadgeColor, formatUSDC } from "@/lib/utils";
 import GameplayViewer from "@/components/match/GameplayViewer";
 import GameExplainer from "@/components/match/GameExplainer";
+import MarketStateCard from "@/components/match/MarketStateCard";
 import PreMatchPanel from "@/components/match/PreMatchPanel";
 import BetModal from "@/components/betting/BetModal";
 import ClaimCard from "@/components/betting/ClaimCard";
@@ -137,6 +138,7 @@ export default function MatchPage() {
           </span>
         )}
         {isResolved && <span className="text-xs text-muted-foreground">Resolved</span>}
+        <GameExplainer gameType={match.game_type} className="ml-auto" />
       </div>
 
       <h1 className="text-xl font-bold text-foreground mb-6">
@@ -177,9 +179,6 @@ export default function MatchPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: gameplay or waiting state */}
         <div className="lg:col-span-2 space-y-4">
-          {/* What the agents are doing — expanded pre-match, collapsed once live */}
-          <GameExplainer gameType={match.game_type} defaultOpen={!showGameplay} />
-
           {showGameplay ? (
             <GameplayViewer
               agents={agents}
@@ -199,6 +198,9 @@ export default function MatchPage() {
 
         {/* Right: betting panel or post-match info */}
         <div className="space-y-4">
+          {/* What each agent is working with — starting params + live state */}
+          <MarketStateCard agents={agents} rounds={rounds} />
+
           {/* Connect wallet prompt */}
           {!address && (
             <div className="rounded-xl border border-border bg-surface p-4 text-center space-y-2">
