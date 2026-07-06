@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useWallet } from "@/lib/wallet";
 import ClaimCard from "@/components/betting/ClaimCard";
 import { cn, gameTypeLabel, gameTypeBadgeColor, formatUSDC } from "@/lib/utils";
-import { Wallet, Trophy, Clock, CheckCircle, XCircle } from "lucide-react";
+import { Wallet, Trophy, Clock, CheckCircle, XCircle, ListOrdered } from "lucide-react";
 
 interface BetWithMatch {
   id: string;
@@ -79,6 +79,12 @@ export default function ProfilePage() {
 
   const totalBet    = bets.reduce((s, b) => s + b.amount, 0);
   const totalClaimed = claimed.reduce((s, b) => s + (b.payout ?? 0), 0);
+  const wins  = bets.filter((b) => b.won === true).length;
+  const losses = lost.length;
+
+  const allBetsSorted = [...bets].sort(
+    (a, b) => new Date(b.placed_at).getTime() - new Date(a.placed_at).getTime()
+  );
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
@@ -90,14 +96,16 @@ export default function ProfilePage() {
         </p>
 
         {/* Stats */}
-        <div className="mt-4 grid grid-cols-3 gap-3">
+        <div className="mt-4 grid grid-cols-3 sm:grid-cols-5 gap-3">
           {[
             { label: "Total Bet", value: formatUSDC(totalBet) },
             { label: "Matches",   value: String(bets.length) },
+            { label: "Wins",      value: String(wins), highlight: "text-agon-green" },
+            { label: "Losses",    value: String(losses), highlight: "text-destructive" },
             { label: "Claimed",   value: formatUSDC(totalClaimed) },
-          ].map(({ label, value }) => (
+          ].map(({ label, value, highlight }) => (
             <div key={label} className="glass-card rounded-xl p-4 text-center hover:border-border-bright transition-colors">
-              <p className="font-data text-xl font-bold text-foreground">{value}</p>
+              <p className={cn("font-data text-xl font-bold", highlight ?? "text-foreground")}>{value}</p>
               <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
             </div>
           ))}
@@ -120,8 +128,9 @@ export default function ProfilePage() {
           </h2>
           <div className="space-y-3">
             {unclaimed.map((bet) => {
-              const totalPot = bet.matches.total_pot;
-              const estimatedPayout = totalPot > 0 ? bet.amount * 0.6 : 0; // simplified
+              // Real payout settled by settlePot() at resolution — not
+              // re-derived client-side (that needs every bettor's stake).
+              const estimatedPayout = bet.payout ?? 0;
               return (
                 <div key={bet.id} className="space-y-2">
                   <div className="flex items-center gap-2 text-xs text-muted-foreground px-1">
@@ -246,6 +255,68 @@ export default function ProfilePage() {
                 </div>
               </Link>
             ))}
+          </div>
+        </section>
+      )}
+
+      {/* Full bet history — every bet ever placed, most recent first */}
+      {bets.length > 0 && (
+        <section className="mt-8">
+          <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-1.5">
+            <ListOrdered className="h-4 w-4 text-muted-foreground" />
+            All Bets
+            <span className="ml-1 rounded-full bg-surface-2 border border-border text-muted-foreground text-xs px-1.5 py-px font-data">
+              {bets.length}
+            </span>
+          </h2>
+          <div className="glass-card rounded-2xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-xs text-muted-foreground uppercase tracking-wide">
+                    <th className="text-left font-medium px-4 py-2.5">Date</th>
+                    <th className="text-left font-medium px-4 py-2.5">Game</th>
+                    <th className="text-left font-medium px-4 py-2.5">Agent</th>
+                    <th className="text-right font-medium px-4 py-2.5">Bet</th>
+                    <th className="text-right font-medium px-4 py-2.5">Result</th>
+                    <th className="text-right font-medium px-4 py-2.5">Payout</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {allBetsSorted.map((bet) => {
+                    const resolved = bet.matches.state === "RESOLVED";
+                    const status = !resolved
+                      ? { label: bet.matches.state === "PLAYING" ? "Live" : "Pending", cls: "text-amber-400" }
+                      : bet.won
+                        ? { label: "Won", cls: "text-agon-green" }
+                        : { label: "Lost", cls: "text-destructive" };
+
+                    return (
+                      <tr key={bet.id} className="hover:bg-surface-2 transition-colors">
+                        <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                          {new Date(bet.placed_at).toLocaleDateString([], { month: "short", day: "numeric" })}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={cn("rounded-full border px-1.5 py-px text-xs font-medium", gameTypeBadgeColor(bet.matches.game_type))}>
+                            {gameTypeLabel(bet.matches.game_type)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <Link href={`/arena/${bet.match_id}`} className="text-foreground font-medium hover:underline">
+                            {agentName(bet)}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-3 text-right font-data text-foreground">{formatUSDC(bet.amount)}</td>
+                        <td className={cn("px-4 py-3 text-right font-medium", status.cls)}>{status.label}</td>
+                        <td className="px-4 py-3 text-right font-data text-muted-foreground">
+                          {resolved && bet.won ? formatUSDC(bet.payout ?? 0) : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
       )}

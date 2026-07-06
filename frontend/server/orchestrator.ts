@@ -58,6 +58,26 @@ export class MatchOrchestrator {
   async runMatch(matchId: string): Promise<void> {
     const db = supabaseAdmin();
 
+    // Atomically claim the match before doing anything else. Two orchestrator
+    // processes can otherwise both pick up the same match — e.g. a worker
+    // restart mid-run leaves the old process's in-memory tracking behind but
+    // the DB row still BETTING_OPEN, so a fresh process re-runs the whole
+    // match as an independent simulation (duplicate fees, duplicate rounds,
+    // and potentially a DIFFERENT winner than the first run already resolved
+    // on-chain). This conditional update only succeeds for one caller.
+    const { data: claimed, error: claimErr } = await db
+      .from("matches")
+      .update({ state: "BETTING_CLOSED" })
+      .eq("id", matchId)
+      .eq("state", "BETTING_OPEN")
+      .select("id");
+
+    if (claimErr) throw new Error(`Failed to claim match ${matchId}: ${claimErr.message}`);
+    if (!claimed || claimed.length === 0) {
+      console.warn(`[orchestrator] match ${matchId} not BETTING_OPEN — already claimed or run, skipping`);
+      return;
+    }
+
     const { data: match, error } = await db
       .from("matches")
       .select("*, match_agents(agent_id, agents(wallet_address, registry_id, model))")
@@ -89,6 +109,7 @@ export class MatchOrchestrator {
     }
 
     // Close betting on-chain (wait for receipt before startMatch — nonce order matters)
+    // DB state is already BETTING_CLOSED from the atomic claim above.
     if (wallet && match.contract_match_id) {
       await writeAndWait(wallet, {
         address: MATCH_ESCROW_ADDRESS,
@@ -97,8 +118,6 @@ export class MatchOrchestrator {
         args: [BigInt(match.contract_match_id)],
       }, `closeBetting(${match.contract_match_id})`);
     }
-
-    await db.from("matches").update({ state: "BETTING_CLOSED" }).eq("id", matchId);
 
     if (wallet && match.contract_match_id) {
       await writeAndWait(wallet, {
