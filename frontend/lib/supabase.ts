@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const rawAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -22,9 +22,9 @@ export const supabase = createClient<any>(url, anon);
 // client (and timer) per call — fatal in the long-running scheduler worker,
 // which calls it dozens of times a minute.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-let _adminClient: any = null;
+let _adminClient: SupabaseClient<any> | null = null;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function supabaseAdmin() {
+export function supabaseAdmin(): SupabaseClient<any> {
   if (_adminClient) return _adminClient;
   const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY || "placeholder-service-role-key";
   _adminClient = createClient<any>(url, serviceRole, {
